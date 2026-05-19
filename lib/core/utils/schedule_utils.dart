@@ -111,7 +111,7 @@ final endController = TextEditingController(text: chunk.endTime ?? '12:00');
                     : null),
                 startTime: Value(startController.text.trim()),
                 endTime: Value(endController.text.trim()),
-                status: Value(chunk.status),
+                status: Value(chunk.status != 'backlog' ? chunk.status : 'scheduled'),
               ));
               Navigator.pop(ctx);
             },
