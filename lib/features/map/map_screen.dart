@@ -18,6 +18,26 @@ class MapScreen extends ConsumerStatefulWidget {
 
 class _MapScreenState extends ConsumerState<MapScreen> {
   final MapController _mapController = MapController();
+  static const List<Color> _roiColors = [
+    Colors.red,
+    Colors.blue,
+    Colors.green,
+    Colors.orange,
+    Colors.purple,
+    Colors.teal,
+    Colors.pink,
+    Colors.brown,
+  ];
+
+  // 用 roiId 對應到顏色
+  final Map<String, Color> _roiColorMap = {};
+
+  Color _getColorForRoi(String roiId) {
+    if (!_roiColorMap.containsKey(roiId)) {
+      _roiColorMap[roiId] = _roiColors[_roiColorMap.length % _roiColors.length];
+    }
+    return _roiColorMap[roiId]!;
+  }
 
   List<Marker> _buildMarkers(List<Poi> pois, Poi? selected) {
     return pois.map((p) => Marker(
@@ -31,7 +51,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         },
         child: Icon(
           Icons.location_pin,
-          color: selected?.id == p.id ? Colors.blue : Colors.red,
+          color: selected?.id == p.id
+              ? Colors.yellow      // 選中時變黃色
+              : _getColorForRoi(p.roiId),
           size: 40,
         ),
       ),
@@ -77,7 +99,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                   userAgentPackageName: 'com.example.trip_planner',
                 ),
-                MarkerLayer(markers: markers),
+                MarkerLayer(
+                  markers: markers,
+                  rotate: false,
+                ),
               ],
             ),
           ),

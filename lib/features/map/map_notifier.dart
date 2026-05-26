@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/database.dart';
 import 'map_state.dart';
+import '../../core/database/tables.dart';
 
 final mapNotifierProvider =
     StateNotifierProvider<MapNotifier, MapState>((ref) {

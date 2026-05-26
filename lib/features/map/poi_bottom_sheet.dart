@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../core/database/tables.dart';
-import '../../core/database/database.dart';
+import '../../../core/database/tables.dart';
+import '../../../core/database/database.dart';
 
 class PoiBottomSheet extends StatelessWidget {
   final Poi poi;
