@@ -110,6 +110,15 @@ class AppDatabase extends _$AppDatabase {
 
   Future<List<Poi>> getAllPois() => select(pois).get();
 
+  Future<List<Poi>> getPoisByDate(String date) async {
+    final chunks = await (select(timeChunks)
+        ..where((t) => t.date.equals(date))).get();
+    final poiIds = chunks.map((c) => c.poiId).toList();
+    if (poiIds.isEmpty) return [];
+    return (select(pois)
+        ..where((p) => p.id.isIn(poiIds))).get();
+  }
+
   Stream<List<String>> watchDistinctAnimeSeries() {
     return select(pois).watch().map((rows) {
       final series = <String>{};

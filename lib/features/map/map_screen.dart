@@ -82,10 +82,39 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       appBar: AppBar(title: const Text('地點地圖')),
       body: Column(
         children: [
-          RoiFilterBar(
-            selectedRoiId: mapState.selectedRoiId,
-            onChanged: (roiId) =>
-                ref.read(mapNotifierProvider.notifier).loadPois(roiId: roiId),
+          Row(
+            children: [
+              Expanded(
+                child: RoiFilterBar(
+                  selectedRoiId: mapState.selectedRoiId,
+                  onChanged: (roiId) =>
+                      ref.read(mapNotifierProvider.notifier).loadPois(roiId: roiId),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.calendar_today),
+                tooltip: '選擇日期',
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2030),
+                  );
+                  if (picked != null) {
+                    final dateStr =
+                        '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                    ref.read(mapNotifierProvider.notifier).loadPoisByDate(dateStr);
+                  }
+                },
+              ),
+              if (mapState.selectedDate != null)
+                TextButton(
+                  onPressed: () =>
+                      ref.read(mapNotifierProvider.notifier).loadPoisByDate(null),
+                  child: const Text('清除'),
+                ),
+            ],
           ),
           Expanded(
             child: FlutterMap(

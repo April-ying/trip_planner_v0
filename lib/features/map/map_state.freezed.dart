@@ -21,6 +21,7 @@ mixin _$MapState {
   Poi? get selectedPoi => throw _privateConstructorUsedError;
   String? get selectedRoiId =>
       throw _privateConstructorUsedError; // null = 顯示全部
+  String? get selectedDate => throw _privateConstructorUsedError;
   bool get isLoading => throw _privateConstructorUsedError;
 
   /// Create a copy of MapState
@@ -39,6 +40,7 @@ abstract class $MapStateCopyWith<$Res> {
     List<Poi> pois,
     Poi? selectedPoi,
     String? selectedRoiId,
+    String? selectedDate,
     bool isLoading,
   });
 }
@@ -61,6 +63,7 @@ class _$MapStateCopyWithImpl<$Res, $Val extends MapState>
     Object? pois = null,
     Object? selectedPoi = freezed,
     Object? selectedRoiId = freezed,
+    Object? selectedDate = freezed,
     Object? isLoading = null,
   }) {
     return _then(
@@ -76,6 +79,10 @@ class _$MapStateCopyWithImpl<$Res, $Val extends MapState>
             selectedRoiId: freezed == selectedRoiId
                 ? _value.selectedRoiId
                 : selectedRoiId // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            selectedDate: freezed == selectedDate
+                ? _value.selectedDate
+                : selectedDate // ignore: cast_nullable_to_non_nullable
                       as String?,
             isLoading: null == isLoading
                 ? _value.isLoading
@@ -100,6 +107,7 @@ abstract class _$$MapStateImplCopyWith<$Res>
     List<Poi> pois,
     Poi? selectedPoi,
     String? selectedRoiId,
+    String? selectedDate,
     bool isLoading,
   });
 }
@@ -121,6 +129,7 @@ class __$$MapStateImplCopyWithImpl<$Res>
     Object? pois = null,
     Object? selectedPoi = freezed,
     Object? selectedRoiId = freezed,
+    Object? selectedDate = freezed,
     Object? isLoading = null,
   }) {
     return _then(
@@ -136,6 +145,10 @@ class __$$MapStateImplCopyWithImpl<$Res>
         selectedRoiId: freezed == selectedRoiId
             ? _value.selectedRoiId
             : selectedRoiId // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        selectedDate: freezed == selectedDate
+            ? _value.selectedDate
+            : selectedDate // ignore: cast_nullable_to_non_nullable
                   as String?,
         isLoading: null == isLoading
             ? _value.isLoading
@@ -153,6 +166,7 @@ class _$MapStateImpl implements _MapState {
     final List<Poi> pois = const [],
     this.selectedPoi,
     this.selectedRoiId,
+    this.selectedDate,
     this.isLoading = false,
   }) : _pois = pois;
 
@@ -171,12 +185,14 @@ class _$MapStateImpl implements _MapState {
   final String? selectedRoiId;
   // null = 顯示全部
   @override
+  final String? selectedDate;
+  @override
   @JsonKey()
   final bool isLoading;
 
   @override
   String toString() {
-    return 'MapState(pois: $pois, selectedPoi: $selectedPoi, selectedRoiId: $selectedRoiId, isLoading: $isLoading)';
+    return 'MapState(pois: $pois, selectedPoi: $selectedPoi, selectedRoiId: $selectedRoiId, selectedDate: $selectedDate, isLoading: $isLoading)';
   }
 
   @override
@@ -191,6 +207,8 @@ class _$MapStateImpl implements _MapState {
             ) &&
             (identical(other.selectedRoiId, selectedRoiId) ||
                 other.selectedRoiId == selectedRoiId) &&
+            (identical(other.selectedDate, selectedDate) ||
+                other.selectedDate == selectedDate) &&
             (identical(other.isLoading, isLoading) ||
                 other.isLoading == isLoading));
   }
@@ -201,6 +219,7 @@ class _$MapStateImpl implements _MapState {
     const DeepCollectionEquality().hash(_pois),
     const DeepCollectionEquality().hash(selectedPoi),
     selectedRoiId,
+    selectedDate,
     isLoading,
   );
 
@@ -218,6 +237,7 @@ abstract class _MapState implements MapState {
     final List<Poi> pois,
     final Poi? selectedPoi,
     final String? selectedRoiId,
+    final String? selectedDate,
     final bool isLoading,
   }) = _$MapStateImpl;
 
@@ -227,6 +247,8 @@ abstract class _MapState implements MapState {
   Poi? get selectedPoi;
   @override
   String? get selectedRoiId; // null = 顯示全部
+  @override
+  String? get selectedDate;
   @override
   bool get isLoading;
 

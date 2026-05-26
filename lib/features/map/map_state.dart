@@ -10,6 +10,8 @@ class MapState with _$MapState {
     @Default([]) List<Poi> pois,
     Poi? selectedPoi,
     String? selectedRoiId,   // null = 顯示全部
+    String? selectedDate,
     @Default(false) bool isLoading,
   }) = _MapState;
 }
+
