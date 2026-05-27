@@ -60,6 +60,13 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             _HomeCard(
+              icon: Icons.movie_creation,
+              title: 'Vlog Generator',
+              subtitle: 'Create a video from ROI',
+              onTap: () => context.push('/vlog'),
+            ),
+            const SizedBox(height: 12),
+            _HomeCard(
               icon: Icons.sync,
               title: 'Export / Import',
               subtitle: 'JSON sync between devices',
