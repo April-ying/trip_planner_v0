@@ -86,6 +86,7 @@ class _VlogPreviewPageState extends ConsumerState<VlogPreviewPage> {
         await tempFile.writeAsBytes(bytes);
 
         framePaths.add(tempFile.path);
+        if (i == frameSource.length - 1) framePaths.add(tempFile.path); // add last frame one more time
 
         // test
         debugPrint(tempFile.path);
@@ -96,7 +97,7 @@ class _VlogPreviewPageState extends ConsumerState<VlogPreviewPage> {
 
       final videoPath = await ffmpeg.createVideoFromImages(
         imagePaths: framePaths,
-        secondsPerImage: 3,
+        secondsPerImage: 4,
       );
 
       // store to photo album

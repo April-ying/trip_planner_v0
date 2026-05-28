@@ -8,7 +8,7 @@ class FFmpegService {
   /// photos to vlog (mp4)
   Future<String> createVideoFromImages({
     required List<String> imagePaths,
-    int secondsPerImage = 3,
+    int secondsPerImage = 4,
   }) async {
 
     final dir = await getApplicationDocumentsDirectory();
