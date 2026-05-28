@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -64,40 +65,37 @@ class _VlogPreviewPageState extends ConsumerState<VlogPreviewPage> {
         return;
       }
 
-      // build frame
-      final frameBuilder = FrameBuilder();
-
-      List<String> framePaths = [];
+      // build frames in a dedicated temp dir so we can clean up afterwards.
+      final framesTempDir = await Directory.systemTemp.createTemp('vlog_frames_');
+      final framePaths = <String>[];
 
       for (int i = 0; i < frameSource.length; i++) {
         final source = frameSource[i];
 
-        final bytes = await frameBuilder.buildCompareFrame(
-          userImagePath: source.userImagePath,
-          referenceImagePath: source.referenceImagePath,
-          title: source.poiName,
-        );
+        // Heavy decode + resize + composite + encode off the main isolate
+        // so the progress spinner keeps animating.
+        final bytes = await Isolate.run(() => FrameBuilder().buildCompareFrame(
+              userImagePath: source.userImagePath,
+              referenceImagePath: source.referenceImagePath,
+              title: source.poiName,
+            ));
 
-        // store as temp frame
-        final tempFile = File(
-          '${Directory.systemTemp.path}/frame_$i.jpg'
-        );
-
+        final tempFile = File('${framesTempDir.path}/frame_$i.jpg');
         await tempFile.writeAsBytes(bytes);
-
         framePaths.add(tempFile.path);
-
-        // test
-        debugPrint(tempFile.path);
       }
 
       // generate mp4
       final ffmpeg = FFmpegService();
-
       final videoPath = await ffmpeg.createVideoFromImages(
         imagePaths: framePaths,
         secondsPerImage: 3,
       );
+
+      // ffmpeg has copied frames into its own dir; we can drop ours now.
+      try {
+        await framesTempDir.delete(recursive: true);
+      } catch (_) {}
 
       // store to photo album
       final hasAccess = await Gal.hasAccess(toAlbum: true);
