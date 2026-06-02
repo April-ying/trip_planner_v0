@@ -37,6 +37,18 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    // The onnxruntime Flutter plugin (pub 1.4.1) bundles ORT 1.15.1, whose
+    // libonnxruntime.so has 4 KB-aligned ELF segments and fails Android's 16 KB
+    // page-size requirement. We ship the official 16 KB-aligned ORT 1.26.0 .so
+    // in app/src/main/jniLibs/arm64-v8a and pickFirst so the app's copy wins
+    // over the plugin's. (ORT's C API is ABI-stable, so the plugin's 1.15.1
+    // bindings still work against the newer lib.) See .gitignore for re-fetch.
+    packaging {
+        jniLibs {
+            pickFirsts += "**/libonnxruntime.so"
+        }
+    }
 }
 
 flutter {

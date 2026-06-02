@@ -1,18 +1,17 @@
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:ui' show FontFeature;
 
 import 'package:camera/camera.dart';
-import 'package:flutter/foundation.dart' show compute;
+import 'package:flutter/foundation.dart' show compute, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/database/database.dart';
-import '../../../core/providers/database_provider.dart';
 import '../../poi/providers/poi_provider.dart';
 import '../providers/camera_provider.dart';
 
@@ -122,6 +121,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _initializeCameras() async {
     try {
+      if (kIsWeb || Platform.isWindows || Platform.isMacOS || Platform.isLinux) return;
       final cameras = await availableCameras();
       if (!mounted) return;
 
@@ -203,7 +203,48 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           ? await _cropPhotoToAspect(photoFile, screenAspectRatio)
           : photoFile;
       if (!mounted) return;
-      ref.read(cameraProvider.notifier).setCapturedPhoto(visiblePhoto);
+
+      // Hand the capture off to the standalone photo editor by route
+      // rather than swapping screens inline — keeps the camera's
+      // controller alive underneath, so popping out of the editor
+      // (back, save, or discard) returns straight to live preview
+      // without re-running camera init.
+      //
+      // When the camera was opened without a POI context (Anime Camera
+      // entry from the home screen), the picker step asks the user
+      // either to save into one of their existing POIs or to spin up
+      // a new one — the photo carries through both paths instead of
+      // hitting a dead-end snackbar.
+      //
+      // If the user already picked a POI earlier via the reference-
+      // image library button (which writes to `cameraProvider.poiId`),
+      // reuse that selection so they aren't asked to pick again.
+      final cachedPoiId = ref.read(cameraProvider).poiId;
+      final initialPoiId = widget.poiId ?? cachedPoiId;
+      final poiSelection = initialPoiId != null
+          ? _PoiCaptureSelection.existing(initialPoiId)
+          : await _resolvePoiForCapture();
+      if (!mounted || poiSelection == null) return;
+
+      if (poiSelection.createNew) {
+        context.push(
+          '/pois/new?capturedPath=${Uri.encodeComponent(visiblePhoto.path)}',
+        );
+        return;
+      }
+
+      final camState = ref.read(cameraProvider);
+      final qs = <String, String>{
+        'path': Uri.encodeComponent(visiblePhoto.path),
+      };
+      if (camState.referenceImage != null) {
+        qs['ref'] = Uri.encodeComponent(camState.referenceImage!.path);
+      }
+      if (camState.referenceImageId != null) {
+        qs['refId'] = camState.referenceImageId!;
+      }
+      final query = qs.entries.map((e) => '${e.key}=${e.value}').join('&');
+      context.push('/pois/${poiSelection.poiId}/photo-edit?$query');
     } on CameraException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -323,10 +364,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       );
     }
 
-    if (camState.capturedPhoto != null) {
-      return _buildComparisonScreen(camState);
-    }
-
     return _buildCameraScreen(camState);
   }
 
@@ -337,7 +374,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         fit: StackFit.expand,
         children: [
           _buildCameraPreview(camState),
-          if (camState.referenceImage != null) _buildReferenceOverlay(camState),
+          if (camState.referenceImage != null && camState.overlayVisible)
+            _buildReferenceOverlay(camState),
           _buildTopBar(camState),
           _buildBottomControls(camState),
           if (_isTakingPicture)
@@ -467,12 +505,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 onTap: () => Navigator.pop(context),
               ),
               const Spacer(),
-              if (camState.referenceImage != null)
-                _CameraIconButton(
-                  icon: Icons.center_focus_strong,
-                  onTap: () => ref.read(cameraProvider.notifier).resetOverlay(),
-                ),
-              if (camState.referenceImage != null) const SizedBox(width: 10),
               _CameraIconButton(
                 icon: Icons.photo_library_outlined,
                 onTap: _pickPoiReferenceImage,
@@ -521,25 +553,51 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               if (camState.referenceImage != null)
                 Row(
                   children: [
-                    const Icon(Icons.layers, color: Colors.white70, size: 18),
-                    Expanded(
-                      child: Slider(
-                        value: camState.overlayOpacity,
-                        min: 0.1,
-                        max: 1,
-                        activeColor: Colors.white,
-                        inactiveColor: Colors.white24,
-                        onChanged: (value) => ref
-                            .read(cameraProvider.notifier)
-                            .setOverlayOpacity(value),
+                    // Layers icon + opacity slider only show while the
+                    // overlay is visible — when the user has tucked it
+                    // away the slider would have nothing to act on, and
+                    // showing it disabled just adds visual noise.
+                    if (camState.overlayVisible) ...[
+                      const Icon(Icons.layers,
+                          color: Colors.white70, size: 18),
+                      Expanded(
+                        child: Slider(
+                          value: camState.overlayOpacity,
+                          min: 0.1,
+                          max: 1,
+                          activeColor: Colors.white,
+                          inactiveColor: Colors.white24,
+                          onChanged: (value) => ref
+                              .read(cameraProvider.notifier)
+                              .setOverlayOpacity(value),
+                        ),
                       ),
-                    ),
+                      _CameraIconButton(
+                        // Reset translate / scale / opacity to defaults
+                        // — same icon the editor uses so the two
+                        // screens share the same affordance.
+                        icon: Icons.restart_alt,
+                        size: 38,
+                        onTap: () => ref
+                            .read(cameraProvider.notifier)
+                            .resetOverlay(),
+                      ),
+                      const SizedBox(width: 8),
+                    ] else
+                      const Spacer(),
                     _CameraIconButton(
-                      icon: Icons.visibility_off,
+                      // Eye toggle: hides / shows the overlay (and its
+                      // controls) without dropping the reference from
+                      // state. To actually swap the reference image
+                      // the user goes through the library button at
+                      // the top.
+                      icon: camState.overlayVisible
+                          ? Icons.visibility_off
+                          : Icons.visibility,
                       size: 38,
                       onTap: () => ref
                           .read(cameraProvider.notifier)
-                          .clearReferenceImage(),
+                          .toggleOverlayVisibility(),
                     ),
                   ],
                 ),
@@ -602,97 +660,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     );
   }
 
-  Widget _buildComparisonScreen(CameraState camState) {
-    final theme = Theme.of(context);
-
-    return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        title: const Text('Compare Shot'),
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => ref.read(cameraProvider.notifier).clearCapture(),
-        ),
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                camState.referenceImage == null
-                    ? 'Review your photo'
-                    : 'Reference and your shot',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                camState.referenceImage == null
-                    ? 'Save it to the selected POI or retake.'
-                    : 'Check the framing before saving to this POI.',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: _ComparisonLayout(
-                  referenceImage: camState.referenceImage,
-                  capturedPhoto: camState.capturedPhoto!,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () =>
-                          ref.read(cameraProvider.notifier).clearCapture(),
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Retake'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () => _savePhoto(camState),
-                      icon: const Icon(Icons.save),
-                      label: const Text('Save'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Future<void> _pickReferenceImage() async {
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: ImageSource.gallery);
     if (picked == null) return;
-
-    final imageFile = File(picked.path);
-    final camState = ref.read(cameraProvider);
-
-    if (camState.poiId != null) {
-      final db = ref.read(databaseProvider);
-      final success = await ref
-          .read(cameraProvider.notifier)
-          .saveUploadedImage(db, imageFile);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(success ? 'Image uploaded!' : 'Upload failed')),
-      );
-      return;
-    }
-
-    ref.read(cameraProvider.notifier).setReferenceImage(imageFile);
+    if (!mounted) return;
+    // Uploading an image as a POI media asset now lives on the POI
+    // detail screen's "Add Image" button, so this button only sets the
+    // current camera overlay reference regardless of context.
+    ref.read(cameraProvider.notifier).setReferenceImage(File(picked.path));
   }
 
   Future<void> _pickPoiReferenceImage() async {
@@ -766,6 +742,84 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         .setReferenceImage(file, referenceImageId: picked.id);
   }
 
+  /// Bottom sheet shown after the user takes a photo from the Anime
+  /// Camera entry (no `poiId` on the route). Lets them either pick
+  /// an existing POI to save the shot into, or jump straight to the
+  /// POI create form with the captured file attached.
+  Future<_PoiCaptureSelection?> _resolvePoiForCapture() async {
+    final poisMap = await ref.read(allPoisProvider.future);
+    final pois = poisMap.values.toList();
+    if (!mounted) return null;
+
+    return showModalBottomSheet<_PoiCaptureSelection>(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(
+                Icons.add_location_alt,
+                color: Colors.white,
+              ),
+              title: const Text(
+                'Create new POI',
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: const Text(
+                'Start a new POI with this photo attached',
+                style: TextStyle(color: Colors.white54),
+              ),
+              onTap: () =>
+                  Navigator.pop(ctx, const _PoiCaptureSelection.create()),
+            ),
+            const Divider(color: Colors.white24, height: 1),
+            Flexible(
+              child: pois.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        'No existing POIs yet.',
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      itemCount: pois.length,
+                      itemBuilder: (ctx, index) {
+                        final poi = pois[index];
+                        return ListTile(
+                          leading: const Icon(
+                            Icons.location_on,
+                            color: Colors.white70,
+                          ),
+                          title: Text(
+                            poi.name,
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                          subtitle: poi.address != null
+                              ? Text(
+                                  poi.address!,
+                                  style:
+                                      const TextStyle(color: Colors.white54),
+                                )
+                              : null,
+                          onTap: () => Navigator.pop(
+                            ctx,
+                            _PoiCaptureSelection.existing(poi.id),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<String?> _resolvePoiIdForReference() async {
     final currentPoiId = ref.read(cameraProvider).poiId;
     if (currentPoiId != null) return currentPoiId;
@@ -796,9 +850,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               poi.name,
               style: const TextStyle(color: Colors.white),
             ),
-            subtitle: poi.animeSeriesRef != null
+            subtitle: poi.address != null
                 ? Text(
-                    poi.animeSeriesRef!,
+                    poi.address!,
                     style: const TextStyle(color: Colors.white54),
                   )
                 : null,
@@ -813,78 +867,22 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     ref.read(cameraProvider.notifier).setPoiId(picked.id);
     return picked.id;
   }
+}
 
-  Future<void> _savePhoto(CameraState camState) async {
-    if (camState.poiId == null) {
-      await _showPoiPicker();
-      return;
-    }
+/// Result of the post-capture POI picker. Either a chosen existing
+/// POI's id, or a sentinel telling the caller to route to the POI
+/// create form with the captured photo attached.
+class _PoiCaptureSelection {
+  final String? poiId;
+  final bool createNew;
 
-    final db = ref.read(databaseProvider);
-    final success = await ref.read(cameraProvider.notifier).savePhoto(db);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(success ? 'Photo saved!' : 'Save failed')),
-      );
-      if (success) {
-        ref.read(cameraProvider.notifier).clearCapture();
-      }
-    }
-  }
+  const _PoiCaptureSelection.existing(String id)
+      : poiId = id,
+        createNew = false;
 
-  Future<void> _showPoiPicker() async {
-    final poisMap = await ref.read(allPoisProvider.future);
-    final pois = poisMap.values.toList();
-
-    if (!mounted) return;
-    if (pois.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No POIs yet. Create one first.')),
-      );
-      return;
-    }
-
-    final picked = await showModalBottomSheet<Poi>(
-      context: context,
-      backgroundColor: Colors.grey[900],
-      builder: (ctx) => ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: pois.length,
-        itemBuilder: (ctx, i) => ListTile(
-          leading: const Icon(Icons.location_on, color: Colors.white70),
-          title: Text(
-            pois[i].name,
-            style: const TextStyle(color: Colors.white),
-          ),
-          subtitle: pois[i].animeSeriesRef != null
-              ? Text(
-                  pois[i].animeSeriesRef!,
-                  style: const TextStyle(color: Colors.white54),
-                )
-              : null,
-          onTap: () => Navigator.pop(ctx, pois[i]),
-        ),
-      ),
-    );
-
-    if (picked != null) {
-      ref.read(cameraProvider.notifier).setPoiId(picked.id);
-      final db = ref.read(databaseProvider);
-      final success = await ref.read(cameraProvider.notifier).savePhoto(db);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              success ? 'Photo saved to ${picked.name}!' : 'Save failed',
-            ),
-          ),
-        );
-        if (success) {
-          ref.read(cameraProvider.notifier).clearCapture();
-        }
-      }
-    }
-  }
+  const _PoiCaptureSelection.create()
+      : poiId = null,
+        createNew = true;
 }
 
 class _FrameModeToggle extends StatelessWidget {
@@ -921,226 +919,6 @@ class _FrameModeToggle extends StatelessWidget {
     );
   }
 }
-
-class _ComparisonLayout extends StatefulWidget {
-  final File? referenceImage;
-  final File capturedPhoto;
-
-  const _ComparisonLayout({
-    required this.referenceImage,
-    required this.capturedPhoto,
-  });
-
-  @override
-  State<_ComparisonLayout> createState() => _ComparisonLayoutState();
-}
-
-class _ComparisonLayoutState extends State<_ComparisonLayout> {
-  bool? _capturedIsPortrait;
-  ImageStream? _imageStream;
-  ImageStreamListener? _imageStreamListener;
-
-  @override
-  void initState() {
-    super.initState();
-    _resolveCapturedOrientation();
-  }
-
-  @override
-  void didUpdateWidget(covariant _ComparisonLayout oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.capturedPhoto.path != widget.capturedPhoto.path) {
-      _capturedIsPortrait = null;
-      _disposeImageStream();
-      _resolveCapturedOrientation();
-    }
-  }
-
-  @override
-  void dispose() {
-    _disposeImageStream();
-    super.dispose();
-  }
-
-  void _disposeImageStream() {
-    final stream = _imageStream;
-    final listener = _imageStreamListener;
-    if (stream != null && listener != null) {
-      stream.removeListener(listener);
-    }
-    _imageStream = null;
-    _imageStreamListener = null;
-  }
-
-  void _resolveCapturedOrientation() {
-    final provider = FileImage(widget.capturedPhoto);
-    final stream = provider.resolve(ImageConfiguration.empty);
-    final listener = ImageStreamListener((info, _) {
-      if (!mounted) {
-        _disposeImageStream();
-        return;
-      }
-      setState(() {
-        _capturedIsPortrait = info.image.height >= info.image.width;
-      });
-      _disposeImageStream();
-    });
-
-    _imageStream = stream;
-    _imageStreamListener = listener;
-    stream.addListener(listener);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final referenceImage = widget.referenceImage;
-
-    if (referenceImage == null) {
-      return _ImageReviewCard(
-        label: 'Your Shot',
-        icon: Icons.camera_alt,
-        imageFile: widget.capturedPhoto,
-      );
-    }
-
-    final isPortrait = _capturedIsPortrait ?? true;
-    final firstCard = Expanded(
-      child: _ImageReviewCard(
-        label: 'Reference',
-        icon: Icons.image,
-        imageFile: referenceImage,
-      ),
-    );
-    final secondCard = Expanded(
-      child: _ImageReviewCard(
-        label: 'Your Shot',
-        icon: Icons.camera_alt,
-        imageFile: widget.capturedPhoto,
-      ),
-    );
-
-    if (isPortrait) {
-      return Column(
-        children: [
-          firstCard,
-          const SizedBox(height: 12),
-          secondCard,
-        ],
-      );
-    }
-
-    return Row(
-      children: [
-        firstCard,
-        const SizedBox(width: 12),
-        secondCard,
-      ],
-    );
-  }
-}
-
-class _ImageReviewCard extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final File imageFile;
-
-  const _ImageReviewCard({
-    required this.label,
-    required this.icon,
-    required this.imageFile,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-            child: Row(
-              children: [
-                Icon(icon, color: theme.colorScheme.primary, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ColoredBox(
-              color: Colors.black,
-              child: InteractiveViewer(
-                minScale: 0.75,
-                maxScale: 4,
-                child: Center(
-                  child: Image.file(imageFile, fit: BoxFit.contain),
-                ),
-              ),
-            ),
-          ),
-          Container(
-            height: 44,
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: IconButton(
-              tooltip: 'Preview',
-              icon: const Icon(Icons.open_in_full),
-              onPressed: () => _showFullscreenImage(context),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showFullscreenImage(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog.fullscreen(
-        backgroundColor: Colors.black,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            InteractiveViewer(
-              minScale: 0.75,
-              maxScale: 5,
-              child: Center(
-                child: Image.file(imageFile, fit: BoxFit.contain),
-              ),
-            ),
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: SafeArea(
-                child: AppBar(
-                  backgroundColor: Colors.black54,
-                  foregroundColor: Colors.white,
-                  title: Text(label),
-                  actions: [
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _FrameModeButton extends StatelessWidget {
   final String label;
   final bool selected;
@@ -1198,6 +976,11 @@ class _CameraIconButton extends StatelessWidget {
         child: Container(
           width: size,
           height: size,
+          // Anchor every icon at the centre so swapping glyphs with
+          // slightly different bounding boxes (e.g. visibility_off's
+          // slash extending past the eye) doesn't visibly nudge the
+          // button up or down on the swap.
+          alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: Colors.black.withValues(alpha: 0.42),

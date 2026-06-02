@@ -11,9 +11,31 @@ class Rois extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+class Animes extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get description => text().nullable()();
+  TextColumn get bangumiId => text().nullable().unique()();
+  IntColumn get createdAt => integer()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class Tags extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get description => text().nullable()();
+  IntColumn get createdAt => integer()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 class Pois extends Table {
   TextColumn get id => text()();
-  TextColumn get roiId => text().references(Rois, #id)();
+  TextColumn get roiId =>
+      text().nullable().references(Rois, #id, onDelete: KeyAction.setNull)();
   TextColumn get name => text()();
   TextColumn get description => text().nullable()();
   TextColumn get address => text().nullable()();
@@ -22,11 +44,29 @@ class Pois extends Table {
   TextColumn get businessHours => text().nullable()();
   TextColumn get contactInfo => text().nullable()();
   TextColumn get coverImageUri => text().nullable()();
-  TextColumn get tags => text().nullable()();
-  TextColumn get animeSeriesRef => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+class PoiAnimes extends Table {
+  TextColumn get poiId =>
+      text().references(Pois, #id, onDelete: KeyAction.cascade)();
+  TextColumn get animeId =>
+      text().references(Animes, #id, onDelete: KeyAction.cascade)();
+
+  @override
+  Set<Column> get primaryKey => {poiId, animeId};
+}
+
+class PoiTags extends Table {
+  TextColumn get poiId =>
+      text().references(Pois, #id, onDelete: KeyAction.cascade)();
+  TextColumn get tagId =>
+      text().references(Tags, #id, onDelete: KeyAction.cascade)();
+
+  @override
+  Set<Column> get primaryKey => {poiId, tagId};
 }
 
 class TimeChunks extends Table {
@@ -66,4 +106,3 @@ class MediaAssets extends Table {
   @override
   Set<Column> get primaryKey => {id};
 }
-

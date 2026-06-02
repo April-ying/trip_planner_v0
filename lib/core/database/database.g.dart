@@ -391,11 +391,11 @@ class $PoisTable extends Pois with TableInfo<$PoisTable, Poi> {
   late final GeneratedColumn<String> roiId = GeneratedColumn<String>(
     'roi_id',
     aliasedName,
-    false,
+    true,
     type: DriftSqlType.string,
-    requiredDuringInsert: true,
+    requiredDuringInsert: false,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES rois (id)',
+      'REFERENCES rois (id) ON DELETE SET NULL',
     ),
   );
   static const VerificationMeta _nameMeta = const VerificationMeta('name');
@@ -480,26 +480,6 @@ class $PoisTable extends Pois with TableInfo<$PoisTable, Poi> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
-  static const VerificationMeta _tagsMeta = const VerificationMeta('tags');
-  @override
-  late final GeneratedColumn<String> tags = GeneratedColumn<String>(
-    'tags',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _animeSeriesRefMeta = const VerificationMeta(
-    'animeSeriesRef',
-  );
-  @override
-  late final GeneratedColumn<String> animeSeriesRef = GeneratedColumn<String>(
-    'anime_series_ref',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -512,8 +492,6 @@ class $PoisTable extends Pois with TableInfo<$PoisTable, Poi> {
     businessHours,
     contactInfo,
     coverImageUri,
-    tags,
-    animeSeriesRef,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -537,8 +515,6 @@ class $PoisTable extends Pois with TableInfo<$PoisTable, Poi> {
         _roiIdMeta,
         roiId.isAcceptableOrUnknown(data['roi_id']!, _roiIdMeta),
       );
-    } else if (isInserting) {
-      context.missing(_roiIdMeta);
     }
     if (data.containsKey('name')) {
       context.handle(
@@ -606,21 +582,6 @@ class $PoisTable extends Pois with TableInfo<$PoisTable, Poi> {
         ),
       );
     }
-    if (data.containsKey('tags')) {
-      context.handle(
-        _tagsMeta,
-        tags.isAcceptableOrUnknown(data['tags']!, _tagsMeta),
-      );
-    }
-    if (data.containsKey('anime_series_ref')) {
-      context.handle(
-        _animeSeriesRefMeta,
-        animeSeriesRef.isAcceptableOrUnknown(
-          data['anime_series_ref']!,
-          _animeSeriesRefMeta,
-        ),
-      );
-    }
     return context;
   }
 
@@ -637,7 +598,7 @@ class $PoisTable extends Pois with TableInfo<$PoisTable, Poi> {
       roiId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}roi_id'],
-      )!,
+      ),
       name: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}name'],
@@ -670,14 +631,6 @@ class $PoisTable extends Pois with TableInfo<$PoisTable, Poi> {
         DriftSqlType.string,
         data['${effectivePrefix}cover_image_uri'],
       ),
-      tags: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}tags'],
-      ),
-      animeSeriesRef: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}anime_series_ref'],
-      ),
     );
   }
 
@@ -689,7 +642,7 @@ class $PoisTable extends Pois with TableInfo<$PoisTable, Poi> {
 
 class Poi extends DataClass implements Insertable<Poi> {
   final String id;
-  final String roiId;
+  final String? roiId;
   final String name;
   final String? description;
   final String? address;
@@ -698,11 +651,9 @@ class Poi extends DataClass implements Insertable<Poi> {
   final String? businessHours;
   final String? contactInfo;
   final String? coverImageUri;
-  final String? tags;
-  final String? animeSeriesRef;
   const Poi({
     required this.id,
-    required this.roiId,
+    this.roiId,
     required this.name,
     this.description,
     this.address,
@@ -711,14 +662,14 @@ class Poi extends DataClass implements Insertable<Poi> {
     this.businessHours,
     this.contactInfo,
     this.coverImageUri,
-    this.tags,
-    this.animeSeriesRef,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
-    map['roi_id'] = Variable<String>(roiId);
+    if (!nullToAbsent || roiId != null) {
+      map['roi_id'] = Variable<String>(roiId);
+    }
     map['name'] = Variable<String>(name);
     if (!nullToAbsent || description != null) {
       map['description'] = Variable<String>(description);
@@ -737,19 +688,15 @@ class Poi extends DataClass implements Insertable<Poi> {
     if (!nullToAbsent || coverImageUri != null) {
       map['cover_image_uri'] = Variable<String>(coverImageUri);
     }
-    if (!nullToAbsent || tags != null) {
-      map['tags'] = Variable<String>(tags);
-    }
-    if (!nullToAbsent || animeSeriesRef != null) {
-      map['anime_series_ref'] = Variable<String>(animeSeriesRef);
-    }
     return map;
   }
 
   PoisCompanion toCompanion(bool nullToAbsent) {
     return PoisCompanion(
       id: Value(id),
-      roiId: Value(roiId),
+      roiId: roiId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(roiId),
       name: Value(name),
       description: description == null && nullToAbsent
           ? const Value.absent()
@@ -768,10 +715,6 @@ class Poi extends DataClass implements Insertable<Poi> {
       coverImageUri: coverImageUri == null && nullToAbsent
           ? const Value.absent()
           : Value(coverImageUri),
-      tags: tags == null && nullToAbsent ? const Value.absent() : Value(tags),
-      animeSeriesRef: animeSeriesRef == null && nullToAbsent
-          ? const Value.absent()
-          : Value(animeSeriesRef),
     );
   }
 
@@ -782,7 +725,7 @@ class Poi extends DataClass implements Insertable<Poi> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return Poi(
       id: serializer.fromJson<String>(json['id']),
-      roiId: serializer.fromJson<String>(json['roiId']),
+      roiId: serializer.fromJson<String?>(json['roiId']),
       name: serializer.fromJson<String>(json['name']),
       description: serializer.fromJson<String?>(json['description']),
       address: serializer.fromJson<String?>(json['address']),
@@ -791,8 +734,6 @@ class Poi extends DataClass implements Insertable<Poi> {
       businessHours: serializer.fromJson<String?>(json['businessHours']),
       contactInfo: serializer.fromJson<String?>(json['contactInfo']),
       coverImageUri: serializer.fromJson<String?>(json['coverImageUri']),
-      tags: serializer.fromJson<String?>(json['tags']),
-      animeSeriesRef: serializer.fromJson<String?>(json['animeSeriesRef']),
     );
   }
   @override
@@ -800,7 +741,7 @@ class Poi extends DataClass implements Insertable<Poi> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
-      'roiId': serializer.toJson<String>(roiId),
+      'roiId': serializer.toJson<String?>(roiId),
       'name': serializer.toJson<String>(name),
       'description': serializer.toJson<String?>(description),
       'address': serializer.toJson<String?>(address),
@@ -809,14 +750,12 @@ class Poi extends DataClass implements Insertable<Poi> {
       'businessHours': serializer.toJson<String?>(businessHours),
       'contactInfo': serializer.toJson<String?>(contactInfo),
       'coverImageUri': serializer.toJson<String?>(coverImageUri),
-      'tags': serializer.toJson<String?>(tags),
-      'animeSeriesRef': serializer.toJson<String?>(animeSeriesRef),
     };
   }
 
   Poi copyWith({
     String? id,
-    String? roiId,
+    Value<String?> roiId = const Value.absent(),
     String? name,
     Value<String?> description = const Value.absent(),
     Value<String?> address = const Value.absent(),
@@ -825,11 +764,9 @@ class Poi extends DataClass implements Insertable<Poi> {
     Value<String?> businessHours = const Value.absent(),
     Value<String?> contactInfo = const Value.absent(),
     Value<String?> coverImageUri = const Value.absent(),
-    Value<String?> tags = const Value.absent(),
-    Value<String?> animeSeriesRef = const Value.absent(),
   }) => Poi(
     id: id ?? this.id,
-    roiId: roiId ?? this.roiId,
+    roiId: roiId.present ? roiId.value : this.roiId,
     name: name ?? this.name,
     description: description.present ? description.value : this.description,
     address: address.present ? address.value : this.address,
@@ -842,10 +779,6 @@ class Poi extends DataClass implements Insertable<Poi> {
     coverImageUri: coverImageUri.present
         ? coverImageUri.value
         : this.coverImageUri,
-    tags: tags.present ? tags.value : this.tags,
-    animeSeriesRef: animeSeriesRef.present
-        ? animeSeriesRef.value
-        : this.animeSeriesRef,
   );
   Poi copyWithCompanion(PoisCompanion data) {
     return Poi(
@@ -867,10 +800,6 @@ class Poi extends DataClass implements Insertable<Poi> {
       coverImageUri: data.coverImageUri.present
           ? data.coverImageUri.value
           : this.coverImageUri,
-      tags: data.tags.present ? data.tags.value : this.tags,
-      animeSeriesRef: data.animeSeriesRef.present
-          ? data.animeSeriesRef.value
-          : this.animeSeriesRef,
     );
   }
 
@@ -886,9 +815,7 @@ class Poi extends DataClass implements Insertable<Poi> {
           ..write('lng: $lng, ')
           ..write('businessHours: $businessHours, ')
           ..write('contactInfo: $contactInfo, ')
-          ..write('coverImageUri: $coverImageUri, ')
-          ..write('tags: $tags, ')
-          ..write('animeSeriesRef: $animeSeriesRef')
+          ..write('coverImageUri: $coverImageUri')
           ..write(')'))
         .toString();
   }
@@ -905,8 +832,6 @@ class Poi extends DataClass implements Insertable<Poi> {
     businessHours,
     contactInfo,
     coverImageUri,
-    tags,
-    animeSeriesRef,
   );
   @override
   bool operator ==(Object other) =>
@@ -921,14 +846,12 @@ class Poi extends DataClass implements Insertable<Poi> {
           other.lng == this.lng &&
           other.businessHours == this.businessHours &&
           other.contactInfo == this.contactInfo &&
-          other.coverImageUri == this.coverImageUri &&
-          other.tags == this.tags &&
-          other.animeSeriesRef == this.animeSeriesRef);
+          other.coverImageUri == this.coverImageUri);
 }
 
 class PoisCompanion extends UpdateCompanion<Poi> {
   final Value<String> id;
-  final Value<String> roiId;
+  final Value<String?> roiId;
   final Value<String> name;
   final Value<String?> description;
   final Value<String?> address;
@@ -937,8 +860,6 @@ class PoisCompanion extends UpdateCompanion<Poi> {
   final Value<String?> businessHours;
   final Value<String?> contactInfo;
   final Value<String?> coverImageUri;
-  final Value<String?> tags;
-  final Value<String?> animeSeriesRef;
   final Value<int> rowid;
   const PoisCompanion({
     this.id = const Value.absent(),
@@ -951,13 +872,11 @@ class PoisCompanion extends UpdateCompanion<Poi> {
     this.businessHours = const Value.absent(),
     this.contactInfo = const Value.absent(),
     this.coverImageUri = const Value.absent(),
-    this.tags = const Value.absent(),
-    this.animeSeriesRef = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   PoisCompanion.insert({
     required String id,
-    required String roiId,
+    this.roiId = const Value.absent(),
     required String name,
     this.description = const Value.absent(),
     this.address = const Value.absent(),
@@ -966,11 +885,8 @@ class PoisCompanion extends UpdateCompanion<Poi> {
     this.businessHours = const Value.absent(),
     this.contactInfo = const Value.absent(),
     this.coverImageUri = const Value.absent(),
-    this.tags = const Value.absent(),
-    this.animeSeriesRef = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
-       roiId = Value(roiId),
        name = Value(name),
        lat = Value(lat),
        lng = Value(lng);
@@ -985,8 +901,6 @@ class PoisCompanion extends UpdateCompanion<Poi> {
     Expression<String>? businessHours,
     Expression<String>? contactInfo,
     Expression<String>? coverImageUri,
-    Expression<String>? tags,
-    Expression<String>? animeSeriesRef,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1000,15 +914,13 @@ class PoisCompanion extends UpdateCompanion<Poi> {
       if (businessHours != null) 'business_hours': businessHours,
       if (contactInfo != null) 'contact_info': contactInfo,
       if (coverImageUri != null) 'cover_image_uri': coverImageUri,
-      if (tags != null) 'tags': tags,
-      if (animeSeriesRef != null) 'anime_series_ref': animeSeriesRef,
       if (rowid != null) 'rowid': rowid,
     });
   }
 
   PoisCompanion copyWith({
     Value<String>? id,
-    Value<String>? roiId,
+    Value<String?>? roiId,
     Value<String>? name,
     Value<String?>? description,
     Value<String?>? address,
@@ -1017,8 +929,6 @@ class PoisCompanion extends UpdateCompanion<Poi> {
     Value<String?>? businessHours,
     Value<String?>? contactInfo,
     Value<String?>? coverImageUri,
-    Value<String?>? tags,
-    Value<String?>? animeSeriesRef,
     Value<int>? rowid,
   }) {
     return PoisCompanion(
@@ -1032,8 +942,6 @@ class PoisCompanion extends UpdateCompanion<Poi> {
       businessHours: businessHours ?? this.businessHours,
       contactInfo: contactInfo ?? this.contactInfo,
       coverImageUri: coverImageUri ?? this.coverImageUri,
-      tags: tags ?? this.tags,
-      animeSeriesRef: animeSeriesRef ?? this.animeSeriesRef,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1071,12 +979,6 @@ class PoisCompanion extends UpdateCompanion<Poi> {
     if (coverImageUri.present) {
       map['cover_image_uri'] = Variable<String>(coverImageUri.value);
     }
-    if (tags.present) {
-      map['tags'] = Variable<String>(tags.value);
-    }
-    if (animeSeriesRef.present) {
-      map['anime_series_ref'] = Variable<String>(animeSeriesRef.value);
-    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1096,8 +998,1115 @@ class PoisCompanion extends UpdateCompanion<Poi> {
           ..write('businessHours: $businessHours, ')
           ..write('contactInfo: $contactInfo, ')
           ..write('coverImageUri: $coverImageUri, ')
-          ..write('tags: $tags, ')
-          ..write('animeSeriesRef: $animeSeriesRef, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AnimesTable extends Animes with TableInfo<$AnimesTable, Anime> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AnimesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _bangumiIdMeta = const VerificationMeta(
+    'bangumiId',
+  );
+  @override
+  late final GeneratedColumn<String> bangumiId = GeneratedColumn<String>(
+    'bangumi_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    description,
+    bangumiId,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'animes';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Anime> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('bangumi_id')) {
+      context.handle(
+        _bangumiIdMeta,
+        bangumiId.isAcceptableOrUnknown(data['bangumi_id']!, _bangumiIdMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Anime map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Anime(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      ),
+      bangumiId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}bangumi_id'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $AnimesTable createAlias(String alias) {
+    return $AnimesTable(attachedDatabase, alias);
+  }
+}
+
+class Anime extends DataClass implements Insertable<Anime> {
+  final String id;
+  final String name;
+  final String? description;
+  final String? bangumiId;
+  final int createdAt;
+  const Anime({
+    required this.id,
+    required this.name,
+    this.description,
+    this.bangumiId,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
+    }
+    if (!nullToAbsent || bangumiId != null) {
+      map['bangumi_id'] = Variable<String>(bangumiId);
+    }
+    map['created_at'] = Variable<int>(createdAt);
+    return map;
+  }
+
+  AnimesCompanion toCompanion(bool nullToAbsent) {
+    return AnimesCompanion(
+      id: Value(id),
+      name: Value(name),
+      description: description == null && nullToAbsent
+          ? const Value.absent()
+          : Value(description),
+      bangumiId: bangumiId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bangumiId),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory Anime.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Anime(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      description: serializer.fromJson<String?>(json['description']),
+      bangumiId: serializer.fromJson<String?>(json['bangumiId']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'description': serializer.toJson<String?>(description),
+      'bangumiId': serializer.toJson<String?>(bangumiId),
+      'createdAt': serializer.toJson<int>(createdAt),
+    };
+  }
+
+  Anime copyWith({
+    String? id,
+    String? name,
+    Value<String?> description = const Value.absent(),
+    Value<String?> bangumiId = const Value.absent(),
+    int? createdAt,
+  }) => Anime(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    description: description.present ? description.value : this.description,
+    bangumiId: bangumiId.present ? bangumiId.value : this.bangumiId,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  Anime copyWithCompanion(AnimesCompanion data) {
+    return Anime(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+      bangumiId: data.bangumiId.present ? data.bangumiId.value : this.bangumiId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Anime(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('description: $description, ')
+          ..write('bangumiId: $bangumiId, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, description, bangumiId, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Anime &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.description == this.description &&
+          other.bangumiId == this.bangumiId &&
+          other.createdAt == this.createdAt);
+}
+
+class AnimesCompanion extends UpdateCompanion<Anime> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String?> description;
+  final Value<String?> bangumiId;
+  final Value<int> createdAt;
+  final Value<int> rowid;
+  const AnimesCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.description = const Value.absent(),
+    this.bangumiId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AnimesCompanion.insert({
+    required String id,
+    required String name,
+    this.description = const Value.absent(),
+    this.bangumiId = const Value.absent(),
+    required int createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       createdAt = Value(createdAt);
+  static Insertable<Anime> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? description,
+    Expression<String>? bangumiId,
+    Expression<int>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (description != null) 'description': description,
+      if (bangumiId != null) 'bangumi_id': bangumiId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AnimesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String?>? description,
+    Value<String?>? bangumiId,
+    Value<int>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return AnimesCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      bangumiId: bangumiId ?? this.bangumiId,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (bangumiId.present) {
+      map['bangumi_id'] = Variable<String>(bangumiId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AnimesCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('description: $description, ')
+          ..write('bangumiId: $bangumiId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $TagsTable extends Tags with TableInfo<$TagsTable, Tag> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TagsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, name, description, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'tags';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Tag> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Tag map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Tag(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $TagsTable createAlias(String alias) {
+    return $TagsTable(attachedDatabase, alias);
+  }
+}
+
+class Tag extends DataClass implements Insertable<Tag> {
+  final String id;
+  final String name;
+  final String? description;
+  final int createdAt;
+  const Tag({
+    required this.id,
+    required this.name,
+    this.description,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
+    }
+    map['created_at'] = Variable<int>(createdAt);
+    return map;
+  }
+
+  TagsCompanion toCompanion(bool nullToAbsent) {
+    return TagsCompanion(
+      id: Value(id),
+      name: Value(name),
+      description: description == null && nullToAbsent
+          ? const Value.absent()
+          : Value(description),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory Tag.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Tag(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      description: serializer.fromJson<String?>(json['description']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'description': serializer.toJson<String?>(description),
+      'createdAt': serializer.toJson<int>(createdAt),
+    };
+  }
+
+  Tag copyWith({
+    String? id,
+    String? name,
+    Value<String?> description = const Value.absent(),
+    int? createdAt,
+  }) => Tag(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    description: description.present ? description.value : this.description,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  Tag copyWithCompanion(TagsCompanion data) {
+    return Tag(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Tag(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('description: $description, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, description, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Tag &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.description == this.description &&
+          other.createdAt == this.createdAt);
+}
+
+class TagsCompanion extends UpdateCompanion<Tag> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String?> description;
+  final Value<int> createdAt;
+  final Value<int> rowid;
+  const TagsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.description = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  TagsCompanion.insert({
+    required String id,
+    required String name,
+    this.description = const Value.absent(),
+    required int createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       createdAt = Value(createdAt);
+  static Insertable<Tag> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? description,
+    Expression<int>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (description != null) 'description': description,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  TagsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String?>? description,
+    Value<int>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return TagsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TagsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('description: $description, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PoiAnimesTable extends PoiAnimes
+    with TableInfo<$PoiAnimesTable, PoiAnime> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PoiAnimesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _poiIdMeta = const VerificationMeta('poiId');
+  @override
+  late final GeneratedColumn<String> poiId = GeneratedColumn<String>(
+    'poi_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES pois (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _animeIdMeta = const VerificationMeta(
+    'animeId',
+  );
+  @override
+  late final GeneratedColumn<String> animeId = GeneratedColumn<String>(
+    'anime_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES animes (id) ON DELETE CASCADE',
+    ),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [poiId, animeId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'poi_animes';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PoiAnime> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('poi_id')) {
+      context.handle(
+        _poiIdMeta,
+        poiId.isAcceptableOrUnknown(data['poi_id']!, _poiIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_poiIdMeta);
+    }
+    if (data.containsKey('anime_id')) {
+      context.handle(
+        _animeIdMeta,
+        animeId.isAcceptableOrUnknown(data['anime_id']!, _animeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_animeIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {poiId, animeId};
+  @override
+  PoiAnime map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PoiAnime(
+      poiId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}poi_id'],
+      )!,
+      animeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}anime_id'],
+      )!,
+    );
+  }
+
+  @override
+  $PoiAnimesTable createAlias(String alias) {
+    return $PoiAnimesTable(attachedDatabase, alias);
+  }
+}
+
+class PoiAnime extends DataClass implements Insertable<PoiAnime> {
+  final String poiId;
+  final String animeId;
+  const PoiAnime({required this.poiId, required this.animeId});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['poi_id'] = Variable<String>(poiId);
+    map['anime_id'] = Variable<String>(animeId);
+    return map;
+  }
+
+  PoiAnimesCompanion toCompanion(bool nullToAbsent) {
+    return PoiAnimesCompanion(poiId: Value(poiId), animeId: Value(animeId));
+  }
+
+  factory PoiAnime.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PoiAnime(
+      poiId: serializer.fromJson<String>(json['poiId']),
+      animeId: serializer.fromJson<String>(json['animeId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'poiId': serializer.toJson<String>(poiId),
+      'animeId': serializer.toJson<String>(animeId),
+    };
+  }
+
+  PoiAnime copyWith({String? poiId, String? animeId}) =>
+      PoiAnime(poiId: poiId ?? this.poiId, animeId: animeId ?? this.animeId);
+  PoiAnime copyWithCompanion(PoiAnimesCompanion data) {
+    return PoiAnime(
+      poiId: data.poiId.present ? data.poiId.value : this.poiId,
+      animeId: data.animeId.present ? data.animeId.value : this.animeId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PoiAnime(')
+          ..write('poiId: $poiId, ')
+          ..write('animeId: $animeId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(poiId, animeId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PoiAnime &&
+          other.poiId == this.poiId &&
+          other.animeId == this.animeId);
+}
+
+class PoiAnimesCompanion extends UpdateCompanion<PoiAnime> {
+  final Value<String> poiId;
+  final Value<String> animeId;
+  final Value<int> rowid;
+  const PoiAnimesCompanion({
+    this.poiId = const Value.absent(),
+    this.animeId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PoiAnimesCompanion.insert({
+    required String poiId,
+    required String animeId,
+    this.rowid = const Value.absent(),
+  }) : poiId = Value(poiId),
+       animeId = Value(animeId);
+  static Insertable<PoiAnime> custom({
+    Expression<String>? poiId,
+    Expression<String>? animeId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (poiId != null) 'poi_id': poiId,
+      if (animeId != null) 'anime_id': animeId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PoiAnimesCompanion copyWith({
+    Value<String>? poiId,
+    Value<String>? animeId,
+    Value<int>? rowid,
+  }) {
+    return PoiAnimesCompanion(
+      poiId: poiId ?? this.poiId,
+      animeId: animeId ?? this.animeId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (poiId.present) {
+      map['poi_id'] = Variable<String>(poiId.value);
+    }
+    if (animeId.present) {
+      map['anime_id'] = Variable<String>(animeId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PoiAnimesCompanion(')
+          ..write('poiId: $poiId, ')
+          ..write('animeId: $animeId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PoiTagsTable extends PoiTags with TableInfo<$PoiTagsTable, PoiTag> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PoiTagsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _poiIdMeta = const VerificationMeta('poiId');
+  @override
+  late final GeneratedColumn<String> poiId = GeneratedColumn<String>(
+    'poi_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES pois (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _tagIdMeta = const VerificationMeta('tagId');
+  @override
+  late final GeneratedColumn<String> tagId = GeneratedColumn<String>(
+    'tag_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES tags (id) ON DELETE CASCADE',
+    ),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [poiId, tagId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'poi_tags';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PoiTag> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('poi_id')) {
+      context.handle(
+        _poiIdMeta,
+        poiId.isAcceptableOrUnknown(data['poi_id']!, _poiIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_poiIdMeta);
+    }
+    if (data.containsKey('tag_id')) {
+      context.handle(
+        _tagIdMeta,
+        tagId.isAcceptableOrUnknown(data['tag_id']!, _tagIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_tagIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {poiId, tagId};
+  @override
+  PoiTag map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PoiTag(
+      poiId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}poi_id'],
+      )!,
+      tagId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tag_id'],
+      )!,
+    );
+  }
+
+  @override
+  $PoiTagsTable createAlias(String alias) {
+    return $PoiTagsTable(attachedDatabase, alias);
+  }
+}
+
+class PoiTag extends DataClass implements Insertable<PoiTag> {
+  final String poiId;
+  final String tagId;
+  const PoiTag({required this.poiId, required this.tagId});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['poi_id'] = Variable<String>(poiId);
+    map['tag_id'] = Variable<String>(tagId);
+    return map;
+  }
+
+  PoiTagsCompanion toCompanion(bool nullToAbsent) {
+    return PoiTagsCompanion(poiId: Value(poiId), tagId: Value(tagId));
+  }
+
+  factory PoiTag.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PoiTag(
+      poiId: serializer.fromJson<String>(json['poiId']),
+      tagId: serializer.fromJson<String>(json['tagId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'poiId': serializer.toJson<String>(poiId),
+      'tagId': serializer.toJson<String>(tagId),
+    };
+  }
+
+  PoiTag copyWith({String? poiId, String? tagId}) =>
+      PoiTag(poiId: poiId ?? this.poiId, tagId: tagId ?? this.tagId);
+  PoiTag copyWithCompanion(PoiTagsCompanion data) {
+    return PoiTag(
+      poiId: data.poiId.present ? data.poiId.value : this.poiId,
+      tagId: data.tagId.present ? data.tagId.value : this.tagId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PoiTag(')
+          ..write('poiId: $poiId, ')
+          ..write('tagId: $tagId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(poiId, tagId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PoiTag &&
+          other.poiId == this.poiId &&
+          other.tagId == this.tagId);
+}
+
+class PoiTagsCompanion extends UpdateCompanion<PoiTag> {
+  final Value<String> poiId;
+  final Value<String> tagId;
+  final Value<int> rowid;
+  const PoiTagsCompanion({
+    this.poiId = const Value.absent(),
+    this.tagId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PoiTagsCompanion.insert({
+    required String poiId,
+    required String tagId,
+    this.rowid = const Value.absent(),
+  }) : poiId = Value(poiId),
+       tagId = Value(tagId);
+  static Insertable<PoiTag> custom({
+    Expression<String>? poiId,
+    Expression<String>? tagId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (poiId != null) 'poi_id': poiId,
+      if (tagId != null) 'tag_id': tagId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PoiTagsCompanion copyWith({
+    Value<String>? poiId,
+    Value<String>? tagId,
+    Value<int>? rowid,
+  }) {
+    return PoiTagsCompanion(
+      poiId: poiId ?? this.poiId,
+      tagId: tagId ?? this.tagId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (poiId.present) {
+      map['poi_id'] = Variable<String>(poiId.value);
+    }
+    if (tagId.present) {
+      map['tag_id'] = Variable<String>(tagId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PoiTagsCompanion(')
+          ..write('poiId: $poiId, ')
+          ..write('tagId: $tagId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2355,6 +3364,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $RoisTable rois = $RoisTable(this);
   late final $PoisTable pois = $PoisTable(this);
+  late final $AnimesTable animes = $AnimesTable(this);
+  late final $TagsTable tags = $TagsTable(this);
+  late final $PoiAnimesTable poiAnimes = $PoiAnimesTable(this);
+  late final $PoiTagsTable poiTags = $PoiTagsTable(this);
   late final $TimeChunksTable timeChunks = $TimeChunksTable(this);
   late final $ReferenceImagesTable referenceImages = $ReferenceImagesTable(
     this,
@@ -2367,12 +3380,51 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     rois,
     pois,
+    animes,
+    tags,
+    poiAnimes,
+    poiTags,
     timeChunks,
     referenceImages,
     mediaAssets,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'rois',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('pois', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'pois',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('poi_animes', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'animes',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('poi_animes', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'pois',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('poi_tags', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'tags',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('poi_tags', kind: UpdateKind.delete)],
+    ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
         'reference_images',
@@ -2679,7 +3731,7 @@ typedef $$RoisTableProcessedTableManager =
 typedef $$PoisTableCreateCompanionBuilder =
     PoisCompanion Function({
       required String id,
-      required String roiId,
+      Value<String?> roiId,
       required String name,
       Value<String?> description,
       Value<String?> address,
@@ -2688,14 +3740,12 @@ typedef $$PoisTableCreateCompanionBuilder =
       Value<String?> businessHours,
       Value<String?> contactInfo,
       Value<String?> coverImageUri,
-      Value<String?> tags,
-      Value<String?> animeSeriesRef,
       Value<int> rowid,
     });
 typedef $$PoisTableUpdateCompanionBuilder =
     PoisCompanion Function({
       Value<String> id,
-      Value<String> roiId,
+      Value<String?> roiId,
       Value<String> name,
       Value<String?> description,
       Value<String?> address,
@@ -2704,8 +3754,6 @@ typedef $$PoisTableUpdateCompanionBuilder =
       Value<String?> businessHours,
       Value<String?> contactInfo,
       Value<String?> coverImageUri,
-      Value<String?> tags,
-      Value<String?> animeSeriesRef,
       Value<int> rowid,
     });
 
@@ -2716,9 +3764,9 @@ final class $$PoisTableReferences
   static $RoisTable _roiIdTable(_$AppDatabase db) =>
       db.rois.createAlias($_aliasNameGenerator(db.pois.roiId, db.rois.id));
 
-  $$RoisTableProcessedTableManager get roiId {
-    final $_column = $_itemColumn<String>('roi_id')!;
-
+  $$RoisTableProcessedTableManager? get roiId {
+    final $_column = $_itemColumn<String>('roi_id');
+    if ($_column == null) return null;
     final manager = $$RoisTableTableManager(
       $_db,
       $_db.rois,
@@ -2727,6 +3775,43 @@ final class $$PoisTableReferences
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$PoiAnimesTable, List<PoiAnime>>
+  _poiAnimesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.poiAnimes,
+    aliasName: $_aliasNameGenerator(db.pois.id, db.poiAnimes.poiId),
+  );
+
+  $$PoiAnimesTableProcessedTableManager get poiAnimesRefs {
+    final manager = $$PoiAnimesTableTableManager(
+      $_db,
+      $_db.poiAnimes,
+    ).filter((f) => f.poiId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_poiAnimesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$PoiTagsTable, List<PoiTag>> _poiTagsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.poiTags,
+    aliasName: $_aliasNameGenerator(db.pois.id, db.poiTags.poiId),
+  );
+
+  $$PoiTagsTableProcessedTableManager get poiTagsRefs {
+    final manager = $$PoiTagsTableTableManager(
+      $_db,
+      $_db.poiTags,
+    ).filter((f) => f.poiId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_poiTagsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
     );
   }
 
@@ -2840,16 +3925,6 @@ class $$PoisTableFilterComposer extends Composer<_$AppDatabase, $PoisTable> {
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get tags => $composableBuilder(
-    column: $table.tags,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get animeSeriesRef => $composableBuilder(
-    column: $table.animeSeriesRef,
-    builder: (column) => ColumnFilters(column),
-  );
-
   $$RoisTableFilterComposer get roiId {
     final $$RoisTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -2871,6 +3946,56 @@ class $$PoisTableFilterComposer extends Composer<_$AppDatabase, $PoisTable> {
           ),
     );
     return composer;
+  }
+
+  Expression<bool> poiAnimesRefs(
+    Expression<bool> Function($$PoiAnimesTableFilterComposer f) f,
+  ) {
+    final $$PoiAnimesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.poiAnimes,
+      getReferencedColumn: (t) => t.poiId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoiAnimesTableFilterComposer(
+            $db: $db,
+            $table: $db.poiAnimes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> poiTagsRefs(
+    Expression<bool> Function($$PoiTagsTableFilterComposer f) f,
+  ) {
+    final $$PoiTagsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.poiTags,
+      getReferencedColumn: (t) => t.poiId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoiTagsTableFilterComposer(
+            $db: $db,
+            $table: $db.poiTags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 
   Expression<bool> timeChunksRefs(
@@ -3002,16 +4127,6 @@ class $$PoisTableOrderingComposer extends Composer<_$AppDatabase, $PoisTable> {
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get tags => $composableBuilder(
-    column: $table.tags,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get animeSeriesRef => $composableBuilder(
-    column: $table.animeSeriesRef,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   $$RoisTableOrderingComposer get roiId {
     final $$RoisTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -3080,14 +4195,6 @@ class $$PoisTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<String> get tags =>
-      $composableBuilder(column: $table.tags, builder: (column) => column);
-
-  GeneratedColumn<String> get animeSeriesRef => $composableBuilder(
-    column: $table.animeSeriesRef,
-    builder: (column) => column,
-  );
-
   $$RoisTableAnnotationComposer get roiId {
     final $$RoisTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -3109,6 +4216,56 @@ class $$PoisTableAnnotationComposer
           ),
     );
     return composer;
+  }
+
+  Expression<T> poiAnimesRefs<T extends Object>(
+    Expression<T> Function($$PoiAnimesTableAnnotationComposer a) f,
+  ) {
+    final $$PoiAnimesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.poiAnimes,
+      getReferencedColumn: (t) => t.poiId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoiAnimesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.poiAnimes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> poiTagsRefs<T extends Object>(
+    Expression<T> Function($$PoiTagsTableAnnotationComposer a) f,
+  ) {
+    final $$PoiTagsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.poiTags,
+      getReferencedColumn: (t) => t.poiId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoiTagsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.poiTags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 
   Expression<T> timeChunksRefs<T extends Object>(
@@ -3202,6 +4359,8 @@ class $$PoisTableTableManager
           Poi,
           PrefetchHooks Function({
             bool roiId,
+            bool poiAnimesRefs,
+            bool poiTagsRefs,
             bool timeChunksRefs,
             bool referenceImagesRefs,
             bool mediaAssetsRefs,
@@ -3221,7 +4380,7 @@ class $$PoisTableTableManager
           updateCompanionCallback:
               ({
                 Value<String> id = const Value.absent(),
-                Value<String> roiId = const Value.absent(),
+                Value<String?> roiId = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String?> description = const Value.absent(),
                 Value<String?> address = const Value.absent(),
@@ -3230,8 +4389,6 @@ class $$PoisTableTableManager
                 Value<String?> businessHours = const Value.absent(),
                 Value<String?> contactInfo = const Value.absent(),
                 Value<String?> coverImageUri = const Value.absent(),
-                Value<String?> tags = const Value.absent(),
-                Value<String?> animeSeriesRef = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PoisCompanion(
                 id: id,
@@ -3244,14 +4401,12 @@ class $$PoisTableTableManager
                 businessHours: businessHours,
                 contactInfo: contactInfo,
                 coverImageUri: coverImageUri,
-                tags: tags,
-                animeSeriesRef: animeSeriesRef,
                 rowid: rowid,
               ),
           createCompanionCallback:
               ({
                 required String id,
-                required String roiId,
+                Value<String?> roiId = const Value.absent(),
                 required String name,
                 Value<String?> description = const Value.absent(),
                 Value<String?> address = const Value.absent(),
@@ -3260,8 +4415,6 @@ class $$PoisTableTableManager
                 Value<String?> businessHours = const Value.absent(),
                 Value<String?> contactInfo = const Value.absent(),
                 Value<String?> coverImageUri = const Value.absent(),
-                Value<String?> tags = const Value.absent(),
-                Value<String?> animeSeriesRef = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PoisCompanion.insert(
                 id: id,
@@ -3274,8 +4427,6 @@ class $$PoisTableTableManager
                 businessHours: businessHours,
                 contactInfo: contactInfo,
                 coverImageUri: coverImageUri,
-                tags: tags,
-                animeSeriesRef: animeSeriesRef,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -3287,6 +4438,8 @@ class $$PoisTableTableManager
           prefetchHooksCallback:
               ({
                 roiId = false,
+                poiAnimesRefs = false,
+                poiTagsRefs = false,
                 timeChunksRefs = false,
                 referenceImagesRefs = false,
                 mediaAssetsRefs = false,
@@ -3294,6 +4447,8 @@ class $$PoisTableTableManager
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
+                    if (poiAnimesRefs) db.poiAnimes,
+                    if (poiTagsRefs) db.poiTags,
                     if (timeChunksRefs) db.timeChunks,
                     if (referenceImagesRefs) db.referenceImages,
                     if (mediaAssetsRefs) db.mediaAssets,
@@ -3332,6 +4487,35 @@ class $$PoisTableTableManager
                       },
                   getPrefetchedDataCallback: (items) async {
                     return [
+                      if (poiAnimesRefs)
+                        await $_getPrefetchedData<Poi, $PoisTable, PoiAnime>(
+                          currentTable: table,
+                          referencedTable: $$PoisTableReferences
+                              ._poiAnimesRefsTable(db),
+                          managerFromTypedResult: (p0) => $$PoisTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).poiAnimesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.poiId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (poiTagsRefs)
+                        await $_getPrefetchedData<Poi, $PoisTable, PoiTag>(
+                          currentTable: table,
+                          referencedTable: $$PoisTableReferences
+                              ._poiTagsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$PoisTableReferences(db, table, p0).poiTagsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.poiId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (timeChunksRefs)
                         await $_getPrefetchedData<Poi, $PoisTable, TimeChunk>(
                           currentTable: table,
@@ -3406,10 +4590,1268 @@ typedef $$PoisTableProcessedTableManager =
       Poi,
       PrefetchHooks Function({
         bool roiId,
+        bool poiAnimesRefs,
+        bool poiTagsRefs,
         bool timeChunksRefs,
         bool referenceImagesRefs,
         bool mediaAssetsRefs,
       })
+    >;
+typedef $$AnimesTableCreateCompanionBuilder =
+    AnimesCompanion Function({
+      required String id,
+      required String name,
+      Value<String?> description,
+      Value<String?> bangumiId,
+      required int createdAt,
+      Value<int> rowid,
+    });
+typedef $$AnimesTableUpdateCompanionBuilder =
+    AnimesCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String?> description,
+      Value<String?> bangumiId,
+      Value<int> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$AnimesTableReferences
+    extends BaseReferences<_$AppDatabase, $AnimesTable, Anime> {
+  $$AnimesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$PoiAnimesTable, List<PoiAnime>>
+  _poiAnimesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.poiAnimes,
+    aliasName: $_aliasNameGenerator(db.animes.id, db.poiAnimes.animeId),
+  );
+
+  $$PoiAnimesTableProcessedTableManager get poiAnimesRefs {
+    final manager = $$PoiAnimesTableTableManager(
+      $_db,
+      $_db.poiAnimes,
+    ).filter((f) => f.animeId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_poiAnimesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$AnimesTableFilterComposer
+    extends Composer<_$AppDatabase, $AnimesTable> {
+  $$AnimesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get bangumiId => $composableBuilder(
+    column: $table.bangumiId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> poiAnimesRefs(
+    Expression<bool> Function($$PoiAnimesTableFilterComposer f) f,
+  ) {
+    final $$PoiAnimesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.poiAnimes,
+      getReferencedColumn: (t) => t.animeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoiAnimesTableFilterComposer(
+            $db: $db,
+            $table: $db.poiAnimes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$AnimesTableOrderingComposer
+    extends Composer<_$AppDatabase, $AnimesTable> {
+  $$AnimesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get bangumiId => $composableBuilder(
+    column: $table.bangumiId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AnimesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AnimesTable> {
+  $$AnimesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get bangumiId =>
+      $composableBuilder(column: $table.bangumiId, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  Expression<T> poiAnimesRefs<T extends Object>(
+    Expression<T> Function($$PoiAnimesTableAnnotationComposer a) f,
+  ) {
+    final $$PoiAnimesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.poiAnimes,
+      getReferencedColumn: (t) => t.animeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoiAnimesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.poiAnimes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$AnimesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AnimesTable,
+          Anime,
+          $$AnimesTableFilterComposer,
+          $$AnimesTableOrderingComposer,
+          $$AnimesTableAnnotationComposer,
+          $$AnimesTableCreateCompanionBuilder,
+          $$AnimesTableUpdateCompanionBuilder,
+          (Anime, $$AnimesTableReferences),
+          Anime,
+          PrefetchHooks Function({bool poiAnimesRefs})
+        > {
+  $$AnimesTableTableManager(_$AppDatabase db, $AnimesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AnimesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AnimesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AnimesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String?> description = const Value.absent(),
+                Value<String?> bangumiId = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AnimesCompanion(
+                id: id,
+                name: name,
+                description: description,
+                bangumiId: bangumiId,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                Value<String?> description = const Value.absent(),
+                Value<String?> bangumiId = const Value.absent(),
+                required int createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => AnimesCompanion.insert(
+                id: id,
+                name: name,
+                description: description,
+                bangumiId: bangumiId,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) =>
+                    (e.readTable(table), $$AnimesTableReferences(db, table, e)),
+              )
+              .toList(),
+          prefetchHooksCallback: ({poiAnimesRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [if (poiAnimesRefs) db.poiAnimes],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (poiAnimesRefs)
+                    await $_getPrefetchedData<Anime, $AnimesTable, PoiAnime>(
+                      currentTable: table,
+                      referencedTable: $$AnimesTableReferences
+                          ._poiAnimesRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$AnimesTableReferences(db, table, p0).poiAnimesRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.animeId == item.id),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$AnimesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AnimesTable,
+      Anime,
+      $$AnimesTableFilterComposer,
+      $$AnimesTableOrderingComposer,
+      $$AnimesTableAnnotationComposer,
+      $$AnimesTableCreateCompanionBuilder,
+      $$AnimesTableUpdateCompanionBuilder,
+      (Anime, $$AnimesTableReferences),
+      Anime,
+      PrefetchHooks Function({bool poiAnimesRefs})
+    >;
+typedef $$TagsTableCreateCompanionBuilder =
+    TagsCompanion Function({
+      required String id,
+      required String name,
+      Value<String?> description,
+      required int createdAt,
+      Value<int> rowid,
+    });
+typedef $$TagsTableUpdateCompanionBuilder =
+    TagsCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String?> description,
+      Value<int> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$TagsTableReferences
+    extends BaseReferences<_$AppDatabase, $TagsTable, Tag> {
+  $$TagsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$PoiTagsTable, List<PoiTag>> _poiTagsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.poiTags,
+    aliasName: $_aliasNameGenerator(db.tags.id, db.poiTags.tagId),
+  );
+
+  $$PoiTagsTableProcessedTableManager get poiTagsRefs {
+    final manager = $$PoiTagsTableTableManager(
+      $_db,
+      $_db.poiTags,
+    ).filter((f) => f.tagId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_poiTagsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$TagsTableFilterComposer extends Composer<_$AppDatabase, $TagsTable> {
+  $$TagsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> poiTagsRefs(
+    Expression<bool> Function($$PoiTagsTableFilterComposer f) f,
+  ) {
+    final $$PoiTagsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.poiTags,
+      getReferencedColumn: (t) => t.tagId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoiTagsTableFilterComposer(
+            $db: $db,
+            $table: $db.poiTags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$TagsTableOrderingComposer extends Composer<_$AppDatabase, $TagsTable> {
+  $$TagsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$TagsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TagsTable> {
+  $$TagsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  Expression<T> poiTagsRefs<T extends Object>(
+    Expression<T> Function($$PoiTagsTableAnnotationComposer a) f,
+  ) {
+    final $$PoiTagsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.poiTags,
+      getReferencedColumn: (t) => t.tagId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoiTagsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.poiTags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$TagsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $TagsTable,
+          Tag,
+          $$TagsTableFilterComposer,
+          $$TagsTableOrderingComposer,
+          $$TagsTableAnnotationComposer,
+          $$TagsTableCreateCompanionBuilder,
+          $$TagsTableUpdateCompanionBuilder,
+          (Tag, $$TagsTableReferences),
+          Tag,
+          PrefetchHooks Function({bool poiTagsRefs})
+        > {
+  $$TagsTableTableManager(_$AppDatabase db, $TagsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TagsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TagsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TagsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String?> description = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => TagsCompanion(
+                id: id,
+                name: name,
+                description: description,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                Value<String?> description = const Value.absent(),
+                required int createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => TagsCompanion.insert(
+                id: id,
+                name: name,
+                description: description,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) =>
+                    (e.readTable(table), $$TagsTableReferences(db, table, e)),
+              )
+              .toList(),
+          prefetchHooksCallback: ({poiTagsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [if (poiTagsRefs) db.poiTags],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (poiTagsRefs)
+                    await $_getPrefetchedData<Tag, $TagsTable, PoiTag>(
+                      currentTable: table,
+                      referencedTable: $$TagsTableReferences._poiTagsRefsTable(
+                        db,
+                      ),
+                      managerFromTypedResult: (p0) =>
+                          $$TagsTableReferences(db, table, p0).poiTagsRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.tagId == item.id),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$TagsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $TagsTable,
+      Tag,
+      $$TagsTableFilterComposer,
+      $$TagsTableOrderingComposer,
+      $$TagsTableAnnotationComposer,
+      $$TagsTableCreateCompanionBuilder,
+      $$TagsTableUpdateCompanionBuilder,
+      (Tag, $$TagsTableReferences),
+      Tag,
+      PrefetchHooks Function({bool poiTagsRefs})
+    >;
+typedef $$PoiAnimesTableCreateCompanionBuilder =
+    PoiAnimesCompanion Function({
+      required String poiId,
+      required String animeId,
+      Value<int> rowid,
+    });
+typedef $$PoiAnimesTableUpdateCompanionBuilder =
+    PoiAnimesCompanion Function({
+      Value<String> poiId,
+      Value<String> animeId,
+      Value<int> rowid,
+    });
+
+final class $$PoiAnimesTableReferences
+    extends BaseReferences<_$AppDatabase, $PoiAnimesTable, PoiAnime> {
+  $$PoiAnimesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $PoisTable _poiIdTable(_$AppDatabase db) =>
+      db.pois.createAlias($_aliasNameGenerator(db.poiAnimes.poiId, db.pois.id));
+
+  $$PoisTableProcessedTableManager get poiId {
+    final $_column = $_itemColumn<String>('poi_id')!;
+
+    final manager = $$PoisTableTableManager(
+      $_db,
+      $_db.pois,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_poiIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $AnimesTable _animeIdTable(_$AppDatabase db) => db.animes.createAlias(
+    $_aliasNameGenerator(db.poiAnimes.animeId, db.animes.id),
+  );
+
+  $$AnimesTableProcessedTableManager get animeId {
+    final $_column = $_itemColumn<String>('anime_id')!;
+
+    final manager = $$AnimesTableTableManager(
+      $_db,
+      $_db.animes,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_animeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$PoiAnimesTableFilterComposer
+    extends Composer<_$AppDatabase, $PoiAnimesTable> {
+  $$PoiAnimesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  $$PoisTableFilterComposer get poiId {
+    final $$PoisTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.poiId,
+      referencedTable: $db.pois,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoisTableFilterComposer(
+            $db: $db,
+            $table: $db.pois,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AnimesTableFilterComposer get animeId {
+    final $$AnimesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.animeId,
+      referencedTable: $db.animes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AnimesTableFilterComposer(
+            $db: $db,
+            $table: $db.animes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PoiAnimesTableOrderingComposer
+    extends Composer<_$AppDatabase, $PoiAnimesTable> {
+  $$PoiAnimesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  $$PoisTableOrderingComposer get poiId {
+    final $$PoisTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.poiId,
+      referencedTable: $db.pois,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoisTableOrderingComposer(
+            $db: $db,
+            $table: $db.pois,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AnimesTableOrderingComposer get animeId {
+    final $$AnimesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.animeId,
+      referencedTable: $db.animes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AnimesTableOrderingComposer(
+            $db: $db,
+            $table: $db.animes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PoiAnimesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PoiAnimesTable> {
+  $$PoiAnimesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  $$PoisTableAnnotationComposer get poiId {
+    final $$PoisTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.poiId,
+      referencedTable: $db.pois,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoisTableAnnotationComposer(
+            $db: $db,
+            $table: $db.pois,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AnimesTableAnnotationComposer get animeId {
+    final $$AnimesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.animeId,
+      referencedTable: $db.animes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AnimesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.animes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PoiAnimesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PoiAnimesTable,
+          PoiAnime,
+          $$PoiAnimesTableFilterComposer,
+          $$PoiAnimesTableOrderingComposer,
+          $$PoiAnimesTableAnnotationComposer,
+          $$PoiAnimesTableCreateCompanionBuilder,
+          $$PoiAnimesTableUpdateCompanionBuilder,
+          (PoiAnime, $$PoiAnimesTableReferences),
+          PoiAnime,
+          PrefetchHooks Function({bool poiId, bool animeId})
+        > {
+  $$PoiAnimesTableTableManager(_$AppDatabase db, $PoiAnimesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PoiAnimesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PoiAnimesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PoiAnimesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> poiId = const Value.absent(),
+                Value<String> animeId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PoiAnimesCompanion(
+                poiId: poiId,
+                animeId: animeId,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String poiId,
+                required String animeId,
+                Value<int> rowid = const Value.absent(),
+              }) => PoiAnimesCompanion.insert(
+                poiId: poiId,
+                animeId: animeId,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$PoiAnimesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({poiId = false, animeId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (poiId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.poiId,
+                                referencedTable: $$PoiAnimesTableReferences
+                                    ._poiIdTable(db),
+                                referencedColumn: $$PoiAnimesTableReferences
+                                    ._poiIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+                    if (animeId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.animeId,
+                                referencedTable: $$PoiAnimesTableReferences
+                                    ._animeIdTable(db),
+                                referencedColumn: $$PoiAnimesTableReferences
+                                    ._animeIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$PoiAnimesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PoiAnimesTable,
+      PoiAnime,
+      $$PoiAnimesTableFilterComposer,
+      $$PoiAnimesTableOrderingComposer,
+      $$PoiAnimesTableAnnotationComposer,
+      $$PoiAnimesTableCreateCompanionBuilder,
+      $$PoiAnimesTableUpdateCompanionBuilder,
+      (PoiAnime, $$PoiAnimesTableReferences),
+      PoiAnime,
+      PrefetchHooks Function({bool poiId, bool animeId})
+    >;
+typedef $$PoiTagsTableCreateCompanionBuilder =
+    PoiTagsCompanion Function({
+      required String poiId,
+      required String tagId,
+      Value<int> rowid,
+    });
+typedef $$PoiTagsTableUpdateCompanionBuilder =
+    PoiTagsCompanion Function({
+      Value<String> poiId,
+      Value<String> tagId,
+      Value<int> rowid,
+    });
+
+final class $$PoiTagsTableReferences
+    extends BaseReferences<_$AppDatabase, $PoiTagsTable, PoiTag> {
+  $$PoiTagsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $PoisTable _poiIdTable(_$AppDatabase db) =>
+      db.pois.createAlias($_aliasNameGenerator(db.poiTags.poiId, db.pois.id));
+
+  $$PoisTableProcessedTableManager get poiId {
+    final $_column = $_itemColumn<String>('poi_id')!;
+
+    final manager = $$PoisTableTableManager(
+      $_db,
+      $_db.pois,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_poiIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $TagsTable _tagIdTable(_$AppDatabase db) =>
+      db.tags.createAlias($_aliasNameGenerator(db.poiTags.tagId, db.tags.id));
+
+  $$TagsTableProcessedTableManager get tagId {
+    final $_column = $_itemColumn<String>('tag_id')!;
+
+    final manager = $$TagsTableTableManager(
+      $_db,
+      $_db.tags,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_tagIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$PoiTagsTableFilterComposer
+    extends Composer<_$AppDatabase, $PoiTagsTable> {
+  $$PoiTagsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  $$PoisTableFilterComposer get poiId {
+    final $$PoisTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.poiId,
+      referencedTable: $db.pois,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoisTableFilterComposer(
+            $db: $db,
+            $table: $db.pois,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$TagsTableFilterComposer get tagId {
+    final $$TagsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tagId,
+      referencedTable: $db.tags,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagsTableFilterComposer(
+            $db: $db,
+            $table: $db.tags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PoiTagsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PoiTagsTable> {
+  $$PoiTagsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  $$PoisTableOrderingComposer get poiId {
+    final $$PoisTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.poiId,
+      referencedTable: $db.pois,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoisTableOrderingComposer(
+            $db: $db,
+            $table: $db.pois,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$TagsTableOrderingComposer get tagId {
+    final $$TagsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tagId,
+      referencedTable: $db.tags,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagsTableOrderingComposer(
+            $db: $db,
+            $table: $db.tags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PoiTagsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PoiTagsTable> {
+  $$PoiTagsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  $$PoisTableAnnotationComposer get poiId {
+    final $$PoisTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.poiId,
+      referencedTable: $db.pois,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PoisTableAnnotationComposer(
+            $db: $db,
+            $table: $db.pois,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$TagsTableAnnotationComposer get tagId {
+    final $$TagsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tagId,
+      referencedTable: $db.tags,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.tags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PoiTagsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PoiTagsTable,
+          PoiTag,
+          $$PoiTagsTableFilterComposer,
+          $$PoiTagsTableOrderingComposer,
+          $$PoiTagsTableAnnotationComposer,
+          $$PoiTagsTableCreateCompanionBuilder,
+          $$PoiTagsTableUpdateCompanionBuilder,
+          (PoiTag, $$PoiTagsTableReferences),
+          PoiTag,
+          PrefetchHooks Function({bool poiId, bool tagId})
+        > {
+  $$PoiTagsTableTableManager(_$AppDatabase db, $PoiTagsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PoiTagsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PoiTagsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PoiTagsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> poiId = const Value.absent(),
+                Value<String> tagId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PoiTagsCompanion(poiId: poiId, tagId: tagId, rowid: rowid),
+          createCompanionCallback:
+              ({
+                required String poiId,
+                required String tagId,
+                Value<int> rowid = const Value.absent(),
+              }) => PoiTagsCompanion.insert(
+                poiId: poiId,
+                tagId: tagId,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$PoiTagsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({poiId = false, tagId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (poiId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.poiId,
+                                referencedTable: $$PoiTagsTableReferences
+                                    ._poiIdTable(db),
+                                referencedColumn: $$PoiTagsTableReferences
+                                    ._poiIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+                    if (tagId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.tagId,
+                                referencedTable: $$PoiTagsTableReferences
+                                    ._tagIdTable(db),
+                                referencedColumn: $$PoiTagsTableReferences
+                                    ._tagIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$PoiTagsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PoiTagsTable,
+      PoiTag,
+      $$PoiTagsTableFilterComposer,
+      $$PoiTagsTableOrderingComposer,
+      $$PoiTagsTableAnnotationComposer,
+      $$PoiTagsTableCreateCompanionBuilder,
+      $$PoiTagsTableUpdateCompanionBuilder,
+      (PoiTag, $$PoiTagsTableReferences),
+      PoiTag,
+      PrefetchHooks Function({bool poiId, bool tagId})
     >;
 typedef $$TimeChunksTableCreateCompanionBuilder =
     TimeChunksCompanion Function({
@@ -4621,6 +7063,13 @@ class $AppDatabaseManager {
   $AppDatabaseManager(this._db);
   $$RoisTableTableManager get rois => $$RoisTableTableManager(_db, _db.rois);
   $$PoisTableTableManager get pois => $$PoisTableTableManager(_db, _db.pois);
+  $$AnimesTableTableManager get animes =>
+      $$AnimesTableTableManager(_db, _db.animes);
+  $$TagsTableTableManager get tags => $$TagsTableTableManager(_db, _db.tags);
+  $$PoiAnimesTableTableManager get poiAnimes =>
+      $$PoiAnimesTableTableManager(_db, _db.poiAnimes);
+  $$PoiTagsTableTableManager get poiTags =>
+      $$PoiTagsTableTableManager(_db, _db.poiTags);
   $$TimeChunksTableTableManager get timeChunks =>
       $$TimeChunksTableTableManager(_db, _db.timeChunks);
   $$ReferenceImagesTableTableManager get referenceImages =>

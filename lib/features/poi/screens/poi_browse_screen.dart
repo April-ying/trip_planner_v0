@@ -6,7 +6,10 @@ import 'package:uuid/uuid.dart';
 
 import '../../../core/database/database.dart';
 import '../../../core/providers/database_provider.dart';
+import '../../../core/widgets/add_speed_dial.dart';
 import '../../roi/providers/roi_provider.dart';
+import '../../anime/providers/anime_provider.dart';
+import '../../tag/providers/tag_provider.dart';
 import '../providers/poi_provider.dart';
 
 class PoiBrowseScreen extends StatelessWidget {
@@ -49,55 +52,51 @@ class PoiBrowseScreen extends StatelessWidget {
             _AllPoisTab(),
           ],
         ),
-        floatingActionButton: _ContextualFab(),
+        floatingActionButton: Builder(
+          builder: (ctx) => AddSpeedDial(
+            actions: buildDefaultAddActions(ctx),
+          ),
+        ),
       ),
     );
   }
 }
 
-class _ContextualFab extends StatefulWidget {
-  @override
-  State<_ContextualFab> createState() => _ContextualFabState();
-}
-
-class _ContextualFabState extends State<_ContextualFab> {
-  TabController? _controller;
-  int _currentIndex = 0;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final controller = DefaultTabController.of(context);
-    if (controller != _controller) {
-      _controller?.removeListener(_handleChange);
-      _controller = controller;
-      _controller!.addListener(_handleChange);
-      _currentIndex = controller.index;
-    }
-  }
-
-  void _handleChange() {
-    if (!mounted) return;
-    setState(() => _currentIndex = _controller!.index);
-  }
-
-  @override
-  void dispose() {
-    _controller?.removeListener(_handleChange);
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_currentIndex == 0) {
-      return FloatingActionButton(
-        onPressed: () => _showCreateRoiDialog(context),
-        tooltip: 'New Region',
-        child: const Icon(Icons.add),
-      );
-    }
-    return const SizedBox.shrink();
-  }
+/// Builds the standard 4-action add menu (New POI, New Region, New Anime,
+/// New Tag). The order is bottom-up: index 0 (New POI) sits closest to the
+/// main FAB. Pass [newPoiAction] to override the "New POI" callback when the
+/// containing screen needs to preserve context (e.g., scoping to an ROI).
+List<SpeedDialAction> buildDefaultAddActions(
+  BuildContext context, {
+  VoidCallback? newPoiAction,
+}) {
+  return [
+    SpeedDialAction(
+      label: 'New POI',
+      icon: Icons.location_on,
+      onTap: newPoiAction ?? () => context.push('/pois/new'),
+    ),
+    SpeedDialAction(
+      label: 'New Region',
+      icon: Icons.layers,
+      onTap: () => showCreateRoiDialog(context),
+    ),
+    SpeedDialAction(
+      label: 'New Anime',
+      icon: Icons.movie_outlined,
+      onTap: () => context.push('/animes/new/edit'),
+    ),
+    SpeedDialAction(
+      label: 'New Tag',
+      icon: Icons.label_outline,
+      onTap: () => context.push('/tags/new/edit'),
+    ),
+    SpeedDialAction(
+      label: 'Import from Bangumi',
+      icon: Icons.cloud_download,
+      onTap: () => context.push('/import/bangumi'),
+    ),
+  ];
 }
 
 class _ByRegionTab extends ConsumerWidget {
@@ -135,6 +134,7 @@ class _ByRegionTab extends ConsumerWidget {
                     : null,
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => context.push('/rois/${roi.id}'),
+                onLongPress: () => context.push('/rois/${roi.id}/edit'),
               ),
             );
           },
@@ -149,32 +149,35 @@ class _ByAnimeTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final asyncSeries = ref.watch(distinctAnimeSeriesProvider);
+    final asyncAnimes = ref.watch(allAnimesProvider);
 
-    return asyncSeries.when(
+    return asyncAnimes.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (err, _) => Center(child: Text('Error: $err')),
-      data: (names) {
-        if (names.isEmpty) {
+      data: (animes) {
+        if (animes.isEmpty) {
           return const Center(
-            child: Text('No anime series yet. Add some when creating POIs.'),
+            child: Text('No anime yet. Tap + to add one.'),
           );
         }
         return ListView.builder(
           padding: const EdgeInsets.all(16),
-          itemCount: names.length,
+          itemCount: animes.length,
           itemBuilder: (context, index) {
-            final name = names[index];
+            final anime = animes[index];
             return Card(
               child: ListTile(
                 leading: Icon(
                   Icons.movie_outlined,
                   color: Theme.of(context).colorScheme.primary,
                 ),
-                title: Text(name),
+                title: Text(anime.name),
+                subtitle: anime.description != null
+                    ? Text(anime.description!, maxLines: 1, overflow: TextOverflow.ellipsis)
+                    : null,
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () =>
-                    context.push('/anime/${Uri.encodeComponent(name)}'),
+                onTap: () => context.push('/anime/${anime.id}'),
+                onLongPress: () => context.push('/animes/${anime.id}/edit'),
               ),
             );
           },
@@ -189,7 +192,7 @@ class _ByTagTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final asyncTags = ref.watch(distinctTagsProvider);
+    final asyncTags = ref.watch(allTagsProvider);
 
     return asyncTags.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -197,7 +200,7 @@ class _ByTagTab extends ConsumerWidget {
       data: (tags) {
         if (tags.isEmpty) {
           return const Center(
-            child: Text('No tags yet. Add some when creating POIs.'),
+            child: Text('No tags yet. Tap + to add one.'),
           );
         }
         return ListView.builder(
@@ -211,10 +214,13 @@ class _ByTagTab extends ConsumerWidget {
                   Icons.label_outline,
                   color: Theme.of(context).colorScheme.primary,
                 ),
-                title: Text(tag),
+                title: Text(tag.name),
+                subtitle: tag.description != null
+                    ? Text(tag.description!, maxLines: 1, overflow: TextOverflow.ellipsis)
+                    : null,
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () =>
-                    context.push('/tag/${Uri.encodeComponent(tag)}'),
+                onTap: () => context.push('/tag/${tag.id}'),
+                onLongPress: () => context.push('/tags/${tag.id}/edit'),
               ),
             );
           },
@@ -249,11 +255,20 @@ class _AllPoisTab extends ConsumerWidget {
               child: ListTile(
                 leading: const Icon(Icons.location_on),
                 title: Text(poi.name),
-                subtitle: poi.animeSeriesRef != null
-                    ? Text(poi.animeSeriesRef!)
-                    : poi.address != null
-                        ? Text(poi.address!)
-                        : null,
+                subtitle: Consumer(
+                  builder: (context, ref, _) {
+                    final animesAsync = ref.watch(animesForPoiProvider(poi.id));
+                    final firstAnime = animesAsync.maybeWhen(
+                      data: (animes) =>
+                          animes.isNotEmpty ? animes.first.name : null,
+                      orElse: () => null,
+                    );
+                    final subtitle = firstAnime ?? poi.address;
+                    return subtitle != null
+                        ? Text(subtitle)
+                        : const SizedBox.shrink();
+                  },
+                ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => context.push('/pois/${poi.id}'),
               ),
@@ -265,7 +280,7 @@ class _AllPoisTab extends ConsumerWidget {
   }
 }
 
-void _showCreateRoiDialog(BuildContext context) {
+void showCreateRoiDialog(BuildContext context) {
   final nameController = TextEditingController();
   final descController = TextEditingController();
 

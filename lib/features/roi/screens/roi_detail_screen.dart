@@ -84,11 +84,7 @@ class RoiDetailScreen extends ConsumerWidget {
               return Card(
                 child: ListTile(
                   title: Text(poi.name),
-                  subtitle: poi.animeSeriesRef != null
-                      ? Text(poi.animeSeriesRef!)
-                      : poi.address != null
-                          ? Text(poi.address!)
-                          : null,
+                  subtitle: poi.address != null ? Text(poi.address!) : null,
                   leading: const Icon(Icons.location_on),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/pois/${poi.id}'),

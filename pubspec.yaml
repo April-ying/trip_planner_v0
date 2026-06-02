@@ -51,6 +51,10 @@ dependencies:
   image: ^4.8.0
   image_picker: ^1.1.2
 
+  # Cutout (摳圖) — two engines: ISNet anime model via ONNX, and Google ML Kit
+  onnxruntime: ^1.4.1
+  google_mlkit_subject_segmentation: ^0.0.3
+
   # Vlog
   ffmpeg_kit_flutter_new: ^4.1.0
   permission_handler: ^11.3.1
@@ -61,6 +65,7 @@ dependencies:
   uuid: ^4.5.1
   intl: ^0.19.0
   json_annotation: ^4.9.0
+  http: ^1.6.0 # Bangumi / Anitabi API clients
 
   # Map
   flutter_map: ^7.0.1
@@ -90,6 +95,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  # ISNet anime cutout model is NOT bundled — IsnetModelStore downloads it
+  # (~176 MB) on first use into app storage and caches it there.
 
   # To add assets to your application, add an assets section, like this:
   # assets:

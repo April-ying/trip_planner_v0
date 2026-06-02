@@ -35,11 +35,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   // 用 roiId 對應到顏色
   final Map<String, Color> _roiColorMap = {};
 
-  Color _getColorForRoi(String roiId) {
-    if (!_roiColorMap.containsKey(roiId)) {
-      _roiColorMap[roiId] = _roiColors[_roiColorMap.length % _roiColors.length];
+  Color _getColorForRoi(String? roiId) {
+    // POIs may have no region (roiId is nullable post-v4); bucket them together.
+    final key = roiId ?? '__none__';
+    if (!_roiColorMap.containsKey(key)) {
+      _roiColorMap[key] = _roiColors[_roiColorMap.length % _roiColors.length];
     }
-    return _roiColorMap[roiId]!;
+    return _roiColorMap[key]!;
   }
 
   List<Marker> _buildMarkers(List<Poi> pois, Poi? selected) {
