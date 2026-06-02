@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/tables.dart';
+import '../../../core/utils/schedule_utils.dart';
 import 'map_notifier.dart';
 import 'poi_bottom_sheet.dart';
 import 'roi_filter_bar.dart';
@@ -187,7 +188,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 icon: const Icon(Icons.calendar_today),
                 tooltip: '選擇日期',
                 onPressed: () async {
-                  final picked = await showDatePicker(
+                  final picked = await showMonthCalendarPicker(
                     context: context,
                     initialDate: DateTime.now(),
                     firstDate: DateTime(2020),
