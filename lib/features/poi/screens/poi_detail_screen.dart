@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' show Value;
+import 'package:gal/gal.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -14,6 +15,8 @@ import '../../../core/database/database.dart';
 import '../../../core/providers/database_provider.dart';
 import '../providers/poi_provider.dart';
 import '../../roi/providers/roi_provider.dart';
+import '../../anime/providers/anime_provider.dart';
+import '../../tag/providers/tag_provider.dart';
 import '../../../core/utils/schedule_utils.dart';
 
 class PoiDetailScreen extends ConsumerWidget {
@@ -59,65 +62,89 @@ class PoiDetailScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+
               // ROI breadcrumb
-              Consumer(
-                builder: (context, ref, _) {
-                  final roiAsync = ref.watch(roiByIdProvider(poi.roiId));
-                  return roiAsync.maybeWhen(
-                    data: (roi) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(4),
-                        onTap: () => context.push('/rois/${poi.roiId}'),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.place_outlined,
-                              size: 16,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              roi.name,
-                              style: TextStyle(
+              if (poi.roiId != null)
+                Consumer(
+                  builder: (context, ref, _) {
+                    final roiAsync = ref.watch(roiByIdProvider(poi.roiId!));
+                    return roiAsync.maybeWhen(
+                      data: (roi) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(4),
+                          onTap: () => context.push('/rois/${poi.roiId}'),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.place_outlined,
+                                size: 16,
                                 color: Theme.of(context).colorScheme.primary,
-                                fontWeight: FontWeight.w500,
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 4),
+                              Text(
+                                roi.name,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
+                      orElse: () => const SizedBox.shrink(),
+                    );
+                  },
+                ),
+
+              // Anime hero chips (m:n via PoiAnimes)
+              Consumer(
+                builder: (context, ref, _) {
+                  final animesAsync = ref.watch(animesForPoiProvider(poi.id));
+                  return animesAsync.maybeWhen(
+                    data: (animes) {
+                      if (animes.isEmpty) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: animes
+                              .map((anime) => ActionChip(
+                                    avatar: Icon(
+                                      Icons.movie_outlined,
+                                      size: 20,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onPrimaryContainer,
+                                    ),
+                                    label: Text(
+                                      anime.name,
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onPrimaryContainer,
+                                      ),
+                                    ),
+                                    backgroundColor: Theme.of(context)
+                                        .colorScheme
+                                        .primaryContainer,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
+                                    onPressed: () =>
+                                        context.push('/anime/${anime.id}'),
+                                  ))
+                              .toList(),
+                        ),
+                      );
+                    },
                     orElse: () => const SizedBox.shrink(),
                   );
                 },
               ),
-
-              // Anime hero chip
-              if (poi.animeSeriesRef != null) ...[
-                ActionChip(
-                  avatar: Icon(
-                    Icons.movie_outlined,
-                    size: 20,
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
-                  ),
-                  label: Text(
-                    poi.animeSeriesRef!,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.onPrimaryContainer,
-                    ),
-                  ),
-                  backgroundColor:
-                      Theme.of(context).colorScheme.primaryContainer,
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  onPressed: () => context.push(
-                    '/anime/${Uri.encodeComponent(poi.animeSeriesRef!)}',
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
 
               // Description
               if (poi.description != null) ...[
@@ -161,45 +188,53 @@ class PoiDetailScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
 
-              // Tags
-              if (poi.tags != null && poi.tags!.trim().isNotEmpty) ...[
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Icon(
-                        Icons.label_outline,
-                        size: 18,
-                        color:
-                            Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: poi.tags!
-                            .split(',')
-                            .map((t) => t.trim())
-                            .where((t) => t.isNotEmpty)
-                            .map((tag) => ActionChip(
-                                  label: Text(tag),
-                                  visualDensity: VisualDensity.compact,
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  onPressed: () => context.push(
-                                    '/tag/${Uri.encodeComponent(tag)}',
-                                  ),
-                                ))
-                            .toList(),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-              ],
+              // Tags (m:n via PoiTags)
+              Consumer(
+                builder: (context, ref, _) {
+                  final tagsAsync = ref.watch(tagsForPoiProvider(poi.id));
+                  return tagsAsync.maybeWhen(
+                    data: (tags) {
+                      if (tags.isEmpty) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Icon(
+                                Icons.label_outline,
+                                size: 18,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                children: tags
+                                    .map((tag) => ActionChip(
+                                          label: Text(tag.name),
+                                          visualDensity: VisualDensity.compact,
+                                          materialTapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                          onPressed: () =>
+                                              context.push('/tag/${tag.id}'),
+                                        ))
+                                    .toList(),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    orElse: () => const SizedBox.shrink(),
+                  );
+                },
+              ),
 
               // Schedule section
               const Divider(height: 32),
@@ -321,11 +356,22 @@ class PoiDetailScreen extends ConsumerWidget {
                 children: [
                   Text('Media Assets',
                       style: Theme.of(context).textTheme.titleMedium),
-                  FilledButton.tonalIcon(
-                    onPressed: () =>
-                        context.push('/camera?poiId=${poi.id}'),
-                    icon: const Icon(Icons.camera_alt, size: 18),
-                    label: const Text('Take Photo'),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'Take photo',
+                        onPressed: () =>
+                            context.push('/camera?poiId=${poi.id}'),
+                        icon: const Icon(Icons.camera_alt),
+                      ),
+                      IconButton(
+                        tooltip: 'Add image',
+                        onPressed: () =>
+                            _addImageToMediaAssets(context, ref, poi.id),
+                        icon: const Icon(Icons.add_photo_alternate),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -354,16 +400,11 @@ class PoiDetailScreen extends ConsumerWidget {
                         onPreview: _isPreviewableImage(asset)
                             ? () => _showImagePreview(context, asset)
                             : null,
+                        onEdit: _isPreviewableImage(asset)
+                            ? () => _editMediaAsset(context, asset, linkedRef)
+                            : null,
                         title: _mediaAssetTitle(asset),
                         icon: _iconForType(asset.type),
-                        linkedReference: linkedRef,
-                        onShowPairedReference: linkedRef != null
-                            ? () => _showFullscreenImage(
-                                  context,
-                                  uri: linkedRef.localUri,
-                                  title: 'Paired Reference',
-                                )
-                            : null,
                       );
                     }).toList(),
                   );
@@ -380,7 +421,7 @@ class PoiDetailScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, String action, Poi poi) {
     switch (action) {
       case 'edit':
-        context.push('/rois/${poi.roiId}/pois/${poi.id}/edit');
+        context.push('/pois/${poi.id}/edit');
         break;
       case 'delete':
         showDialog(
@@ -521,6 +562,7 @@ class PoiDetailScreen extends ConsumerWidget {
       'reference_frame' => const Icon(Icons.image),
       'user_photo' => const Icon(Icons.camera_alt),
       'uploaded_image' => const Icon(Icons.save_alt),
+      'comparison_image' => const Icon(Icons.compare),
       'ticket_qr' => const Icon(Icons.qr_code),
       'audio_bgm' => const Icon(Icons.music_note),
       _ => const Icon(Icons.attachment),
@@ -667,6 +709,7 @@ class PoiDetailScreen extends ConsumerWidget {
     final uri = asset.localUri.toLowerCase();
     final isKnownImageType = asset.type == 'user_photo' ||
         asset.type == 'uploaded_image' ||
+        asset.type == 'comparison_image' ||
         asset.type == 'reference_frame' ||
         asset.type == 'ticket_qr';
     final hasImageExtension = uri.endsWith('.jpg') ||
@@ -757,6 +800,91 @@ class PoiDetailScreen extends ConsumerWidget {
   String _referenceImageTitle(ReferenceImage image) {
     final fileName = p.basenameWithoutExtension(image.localUri);
     return fileName.isEmpty ? 'Reference' : fileName;
+  }
+
+  /// Pick an image from the gallery and drop the user into the photo
+  /// editor against it. The file is copied into the app's temp
+  /// directory first so the editor can freely overwrite it with the
+  /// edited bytes without touching the gallery item or the picker's
+  /// cache; once the editor saves, that temp copy gets archived into
+  /// permanent app storage with `type = uploaded_image`.
+  Future<void> _addImageToMediaAssets(
+    BuildContext context,
+    WidgetRef ref,
+    String poiId,
+  ) async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery);
+    if (picked == null) return;
+    if (!context.mounted) return;
+
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final ext = p.extension(picked.path).isEmpty
+          ? '.jpg'
+          : p.extension(picked.path);
+      final tempPath = p.join(
+        tempDir.path,
+        'upload_${DateTime.now().millisecondsSinceEpoch}$ext',
+      );
+      await File(picked.path).copy(tempPath);
+
+      if (!context.mounted) return;
+      context.push(
+        '/pois/$poiId/photo-edit'
+        '?path=${Uri.encodeComponent(tempPath)}'
+        '&upload=1',
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load image: $e')),
+      );
+    }
+  }
+
+  /// Open the photo editor on an existing media asset. Copies it to a temp file
+  /// first so editing is non-destructive — saving creates a NEW asset and the
+  /// original is preserved. Passes the paired reference (if any) so Match Color
+  /// / Compose are available.
+  Future<void> _editMediaAsset(
+    BuildContext context,
+    MediaAsset asset,
+    ReferenceImage? linkedRef,
+  ) async {
+    final src = File(asset.localUri);
+    if (!await src.exists()) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('File not found.')),
+        );
+      }
+      return;
+    }
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final ext = p.extension(asset.localUri).isEmpty
+          ? '.jpg'
+          : p.extension(asset.localUri);
+      final tempPath = p.join(
+        tempDir.path,
+        'edit_${DateTime.now().millisecondsSinceEpoch}$ext',
+      );
+      await src.copy(tempPath);
+      if (!context.mounted) return;
+      final qs = <String, String>{'path': Uri.encodeComponent(tempPath)};
+      if (linkedRef != null) {
+        qs['ref'] = Uri.encodeComponent(linkedRef.localUri);
+        qs['refId'] = asset.referenceImageId!;
+      }
+      final query = qs.entries.map((e) => '${e.key}=${e.value}').join('&');
+      context.push('/pois/${asset.poiId}/photo-edit?$query');
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Edit failed: $e')),
+      );
+    }
   }
 
   Future<void> _addReferenceImage(
@@ -924,8 +1052,7 @@ class _MediaAssetTile extends StatelessWidget {
   final VoidCallback onRename;
   final VoidCallback onDelete;
   final VoidCallback? onPreview;
-  final ReferenceImage? linkedReference;
-  final VoidCallback? onShowPairedReference;
+  final VoidCallback? onEdit;
 
   const _MediaAssetTile({
     required this.asset,
@@ -934,8 +1061,7 @@ class _MediaAssetTile extends StatelessWidget {
     required this.onRename,
     required this.onDelete,
     required this.onPreview,
-    this.linkedReference,
-    this.onShowPairedReference,
+    this.onEdit,
   });
 
   @override
@@ -952,21 +1078,39 @@ class _MediaAssetTile extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (linkedReference != null)
-            IconButton(
-              tooltip: 'View paired reference',
-              icon: const Icon(Icons.link),
-              onPressed: onShowPairedReference,
-            ),
           IconButton(
-            tooltip: 'Rename',
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: onRename,
+            tooltip: 'Save to device',
+            icon: const Icon(Icons.download),
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              try {
+                await Gal.putImage(asset.localUri);
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('Saved to gallery.')),
+                );
+              } on GalException catch (e) {
+                messenger.showSnackBar(
+                  SnackBar(content: Text('Save failed: ${e.type.message}')),
+                );
+              }
+            },
           ),
           IconButton(
-            tooltip: 'Delete',
-            icon: const Icon(Icons.delete_outline),
-            onPressed: onDelete,
+            tooltip: 'Edit',
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: onEdit,
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'More',
+            icon: const Icon(Icons.more_vert),
+            onSelected: (v) {
+              if (v == 'rename') onRename();
+              if (v == 'delete') onDelete();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'rename', child: Text('Rename')),
+              PopupMenuItem(value: 'delete', child: Text('Delete')),
+            ],
           ),
           IconButton(
             tooltip: 'Preview',

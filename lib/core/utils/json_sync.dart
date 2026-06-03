@@ -33,8 +33,6 @@ class JsonSync {
           'business_hours': poi.businessHours,
           'contact_info': poi.contactInfo,
           'cover_image_uri': poi.coverImageUri,
-          'tags': poi.tags,
-          'anime_series_ref': poi.animeSeriesRef,
           'time_chunks': chunks
               .map((c) => {
                     'id': c.id,
@@ -97,7 +95,7 @@ class JsonSync {
 
         await db.into(db.pois).insertOnConflictUpdate(PoisCompanion.insert(
           id: poi['id'] as String,
-          roiId: roi['id'] as String,
+          roiId: Value(roi['id'] as String),
           name: poi['name'] as String,
           description: Value(poi['description'] as String?),
           address: Value(poi['address'] as String?),
@@ -106,8 +104,6 @@ class JsonSync {
           businessHours: Value(poi['business_hours'] as String?),
           contactInfo: Value(poi['contact_info'] as String?),
           coverImageUri: Value(poi['cover_image_uri'] as String?),
-          tags: Value(poi['tags'] as String?),
-          animeSeriesRef: Value(poi['anime_series_ref'] as String?),
         ));
 
         final chunks = poi['time_chunks'] as List<dynamic>? ?? [];

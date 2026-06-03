@@ -1,20 +1,16 @@
 import 'dart:io';
 import 'dart:ui';
 
-import 'package:drift/drift.dart' show Value;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
-import 'package:uuid/uuid.dart';
-
-import '../../../core/database/database.dart';
 
 class CameraState {
   final bool isInitialized;
   final File? referenceImage;
   final String? referenceImageId;
-  final File? capturedPhoto;
+  // Whether the reference overlay should currently be painted on top
+  // of the live preview. The reference itself stays in state when
+  // toggled off so the user can flick it back on without re-picking.
+  final bool overlayVisible;
   final String? poiId;
   final String? error;
   final Offset overlayOffset;
@@ -25,7 +21,7 @@ class CameraState {
     this.isInitialized = false,
     this.referenceImage,
     this.referenceImageId,
-    this.capturedPhoto,
+    this.overlayVisible = true,
     this.poiId,
     this.error,
     this.overlayOffset = Offset.zero,
@@ -37,7 +33,7 @@ class CameraState {
     bool? isInitialized,
     File? referenceImage,
     String? referenceImageId,
-    File? capturedPhoto,
+    bool? overlayVisible,
     String? poiId,
     String? error,
     Offset? overlayOffset,
@@ -45,7 +41,6 @@ class CameraState {
     double? overlayOpacity,
     bool clearReferenceImage = false,
     bool clearReferenceImageId = false,
-    bool clearCapturedPhoto = false,
     bool clearError = false,
   }) {
     return CameraState(
@@ -55,8 +50,7 @@ class CameraState {
       referenceImageId: (clearReferenceImage || clearReferenceImageId)
           ? null
           : (referenceImageId ?? this.referenceImageId),
-      capturedPhoto:
-          clearCapturedPhoto ? null : (capturedPhoto ?? this.capturedPhoto),
+      overlayVisible: overlayVisible ?? this.overlayVisible,
       poiId: poiId ?? this.poiId,
       error: clearError ? null : (error ?? this.error),
       overlayOffset: overlayOffset ?? this.overlayOffset,
@@ -82,6 +76,7 @@ class CameraNotifier extends StateNotifier<CameraState> {
       referenceImage: file,
       referenceImageId: referenceImageId,
       clearReferenceImageId: referenceImageId == null,
+      overlayVisible: true,
       overlayOffset: Offset.zero,
       overlayScale: 1,
       overlayOpacity: 0.55,
@@ -90,6 +85,14 @@ class CameraNotifier extends StateNotifier<CameraState> {
 
   void clearReferenceImage() {
     state = state.copyWith(clearReferenceImage: true);
+  }
+
+  /// Flip the overlay's visibility without throwing away the reference
+  /// itself — the eye-icon toggle uses this so the user can hide the
+  /// overlay temporarily and bring it back without re-picking from
+  /// the library.
+  void toggleOverlayVisibility() {
+    state = state.copyWith(overlayVisible: !state.overlayVisible);
   }
 
   void updateOverlayTransform({
@@ -114,99 +117,8 @@ class CameraNotifier extends StateNotifier<CameraState> {
     );
   }
 
-  void clearCapture() {
-    state = state.copyWith(clearCapturedPhoto: true);
-  }
-
-  void setCapturedPhoto(File file) {
-    state = state.copyWith(capturedPhoto: file);
-  }
-
-  Future<bool> savePhoto(AppDatabase db) async {
-    if (state.capturedPhoto == null) return false;
-    if (state.poiId == null) return false;
-
-    try {
-      final savedPath = await _copyImageToAppStorage(state.capturedPhoto!);
-
-      await db.insertMediaAsset(MediaAssetsCompanion.insert(
-        id: const Uuid().v4(),
-        poiId: state.poiId!,
-        type: 'user_photo',
-        localUri: savedPath,
-        remoteUrl: const Value(null),
-        metadata: const Value(null),
-        referenceImageId: Value(state.referenceImageId),
-      ));
-
-      return true;
-    } catch (e) {
-      state = state.copyWith(error: 'Save failed: $e');
-      return false;
-    }
-  }
-
-  Future<bool> saveUploadedImage(AppDatabase db, File imageFile) async {
-    if (state.poiId == null) return false;
-
-    try {
-      final savedPath = await _copyImageToAppStorage(imageFile);
-
-      await db.insertMediaAsset(MediaAssetsCompanion.insert(
-        id: const Uuid().v4(),
-        poiId: state.poiId!,
-        type: 'uploaded_image',
-        localUri: savedPath,
-        remoteUrl: const Value(null),
-        metadata: const Value(null),
-      ));
-
-      return true;
-    } catch (e) {
-      state = state.copyWith(error: 'Upload failed: $e');
-      return false;
-    }
-  }
-
   void setPoiId(String id) {
     state = state.copyWith(poiId: id);
-  }
-
-  Future<String> _copyImageToAppStorage(File sourceFile) async {
-    final appDir = await getApplicationDocumentsDirectory();
-    final photosDir = Directory(p.join(appDir.path, 'camera_photos'));
-    if (!await photosDir.exists()) {
-      await photosDir.create(recursive: true);
-    }
-
-    final timestamp = DateFormat('MMdd-HH-mm-ss').format(DateTime.now());
-    final extension = p.extension(sourceFile.path).isEmpty
-        ? '.jpg'
-        : p.extension(sourceFile.path);
-    final savedPath = await _nextAvailablePath(
-      photosDir.path,
-      timestamp,
-      extension,
-    );
-    await sourceFile.copy(savedPath);
-
-    return savedPath;
-  }
-
-  Future<String> _nextAvailablePath(
-    String directory,
-    String baseName,
-    String extension,
-  ) async {
-    var candidate = p.join(directory, '$baseName$extension');
-    var suffix = 1;
-
-    while (await File(candidate).exists()) {
-      candidate = p.join(directory, '$baseName-$suffix$extension');
-      suffix += 1;
-    }
-
-    return candidate;
   }
 }
 

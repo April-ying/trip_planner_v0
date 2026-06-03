@@ -1,16 +1,18 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import '../../../core/database/tables.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/database.dart';
+import 'package:trip_planner/features/tag/providers/tag_provider.dart';
 
-class PoiBottomSheet extends StatelessWidget {
+class PoiBottomSheet extends ConsumerWidget {
   final Poi poi;
 
   const PoiBottomSheet({super.key, required this.poi});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tagsAsync = ref.watch(tagsForPoiProvider(poi.id));
     return DraggableScrollableSheet(
       initialChildSize: 0.4,
       minChildSize: 0.25,
@@ -70,16 +72,20 @@ class PoiBottomSheet extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodySmall),
             ]),
           ],
-          if (poi.tags != null) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 6,
-              children: (poi.tags ?? '').split(',')
-                  .where((t) => t.trim().isNotEmpty)
-                  .map((tag) => Chip(label: Text(tag.trim())))
-                  .toList(),
-            ),
-          ],
+          ...tagsAsync.maybeWhen(
+            data: (tags) => tags.isEmpty
+                ? const []
+                : [
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 6,
+                      children: tags
+                          .map((tag) => Chip(label: Text(tag.name)))
+                          .toList(),
+                    ),
+                  ],
+            orElse: () => const [],
+          ),
         ],
       ),
     );

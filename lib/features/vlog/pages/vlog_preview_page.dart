@@ -1,6 +1,6 @@
 import 'dart:io';
-import 'dart:isolate';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:trip_planner/core/providers/database_provider.dart';
@@ -10,6 +10,26 @@ import 'package:gal/gal.dart';
 import '../data/vlog_repository.dart';
 import '../services/frame_builder.dart';
 import '../services/ffmpeg_service.dart';
+
+class _FrameArgs {
+  final String userImagePath;
+  final String? referenceImagePath;
+  final String title;
+
+  const _FrameArgs({
+    required this.userImagePath,
+    required this.referenceImagePath,
+    required this.title,
+  });
+}
+
+Future<Uint8List> _buildFrameInIsolate(_FrameArgs args) {
+  return FrameBuilder().buildCompareFrame(
+    userImagePath: args.userImagePath,
+    referenceImagePath: args.referenceImagePath,
+    title: args.title,
+  );
+}
 
 class VlogPreviewPage extends ConsumerStatefulWidget {
 
@@ -72,13 +92,16 @@ class _VlogPreviewPageState extends ConsumerState<VlogPreviewPage> {
       for (int i = 0; i < frameSource.length; i++) {
         final source = frameSource[i];
 
-        // Heavy decode + resize + composite + encode off the main isolate
-        // so the progress spinner keeps animating.
-        final bytes = await Isolate.run(() => FrameBuilder().buildCompareFrame(
-              userImagePath: source.userImagePath,
-              referenceImagePath: source.referenceImagePath,
-              title: source.poiName,
-            ));
+        // compute() must use a top-level helper rather than Isolate.run with
+        // a closure: a closure created inside this instance method silently
+        // captures `this` (the State) via its lexical context, dragging the
+        // entire widget tree across the isolate boundary, which fails the
+        // sendability check.
+        final bytes = await compute(_buildFrameInIsolate, _FrameArgs(
+          userImagePath: source.userImagePath,
+          referenceImagePath: source.referenceImagePath,
+          title: source.poiName,
+        ));
 
         final tempFile = File('${framesTempDir.path}/frame_$i.jpg');
         await tempFile.writeAsBytes(bytes);

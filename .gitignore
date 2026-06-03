@@ -1,3 +1,14 @@
+# Large ML models (cutout) — re-download, do not commit (GitHub rejects >100 MB)
+# isnet-anime: https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-anime.onnx
+assets/models/*.onnx
+# onnxruntime native libs (plugin ships only arm64-v8a + armeabi-v7a):
+#  - arm64-v8a: 16 KB-aligned ORT 1.26.0 (replaces plugin's crashing 1.15.1)
+#    from onnxruntime-android-1.26.0.aar
+#  - x86_64: ORT 1.15.1 jni/x86_64/libonnxruntime.so so the engine runs on
+#    x86_64 emulators, from onnxruntime-android-1.15.1.aar
+# Both via repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/
+android/app/src/main/jniLibs/*/libonnxruntime.so
+
 # Miscellaneous
 *.class
 *.log
