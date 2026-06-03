@@ -33,10 +33,10 @@ class MapNotifier extends StateNotifier<MapState> {
         ? await _db.getPoisByDate(date)
         : await _db.getAllPois();
     state = state.copyWith(
-      pois: pois, 
-      isLoading: false, 
-      selectedRoiId: date,
-      selectedDate: null, 
+      pois: pois,
+      isLoading: false,
+      selectedDate: date,
+      selectedRoiId: null,
     );
   }
 
