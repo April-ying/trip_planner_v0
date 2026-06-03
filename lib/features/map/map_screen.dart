@@ -17,6 +17,10 @@ class MapScreen extends ConsumerStatefulWidget {
 }
 
 class _MapScreenState extends ConsumerState<MapScreen> {
+
+  // 1. 宣告一個變數用來儲存訂閱狀態
+  ProviderSubscription? _mapSubscription;
+  
   final MapController _mapController = MapController();
   static const List<Color> _roiColors = [
     Colors.red,
@@ -101,21 +105,22 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-@override
-void initState() {
-  super.initState();
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    _mapController.mapEventStream.first.then((_) {
-      ref.listenManual(mapNotifierProvider, (previous, next) {
-        if (previous?.pois != next.pois) {
-          if (next.selectedDate != null || next.selectedRoiId != null) {
-            _fitMarkers(next.pois);
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _mapController.mapEventStream.first.then((_) {
+        // 2. 將監聽器存入變數
+        _mapSubscription = ref.listenManual(mapNotifierProvider, (previous, next) {
+          if (previous?.pois != next.pois) {
+            if (next.selectedDate != null || next.selectedRoiId != null) {
+              _fitMarkers(next.pois);
+            }
           }
-        }
+        });
       });
     });
-  });
-}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -124,7 +129,7 @@ void initState() {
 
     return Scaffold(
       appBar: AppBar(
-                title: const Text('Poi地圖'),
+                title: const Text('Map'),
               ),
       body: Column(
         children: [
@@ -134,11 +139,18 @@ void initState() {
                 child: RoiFilterBar(
                   selectedRoiId: mapState.selectedRoiId,
                   onChanged: (roiId) async {
+                    // 1. 先等待資料載入並更新狀態
                     await ref.read(mapNotifierProvider.notifier).loadPois(roiId: roiId);
-                    await Future.delayed(const Duration(milliseconds: 300));
-                    if (mounted) {
-                      _fitMarkers(ref.read(mapNotifierProvider).pois);
-                    }
+                    
+                    // 2. 檢查 Widget 是否還存在（防止非同步期間使用者已經跳出畫面）
+                    if (!mounted) return;
+                    
+                    // 3. 告訴 Flutter：當這一幀的資料渲染到畫面上後，立刻執行縮放
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        _fitMarkers(ref.read(mapNotifierProvider).pois);
+                      }
+                    });
                   },
                 ),
               ),
@@ -165,8 +177,7 @@ void initState() {
               ),
               if (mapState.selectedDate != null)
                 TextButton(
-                  onPressed: () =>
-                      ref.read(mapNotifierProvider.notifier).loadPoisByDate(null),
+                  onPressed: () => ref.read(mapNotifierProvider.notifier).clearDateFilter(),
                   child: const Text('清除'),
                 ),
             ],
@@ -193,5 +204,11 @@ void initState() {
         ],
       ),
     );
+  }
+  @override
+  void dispose() {
+    // 3. 當畫面銷毀時，務必手動關閉監聽器，防止記憶體洩漏！
+    _mapSubscription?.close();
+    super.dispose();
   }
 }

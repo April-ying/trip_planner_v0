@@ -43,4 +43,18 @@ class MapNotifier extends StateNotifier<MapState> {
   void selectPoi(Poi? poi) => state = state.copyWith(selectedPoi: poi);
 
   void clearSelection() => state = state.copyWith(selectedPoi: null);
+
+  /// 清除日期篩選，並重新載入不限日期的 POI 資料
+  Future<void> clearDateFilter() async {
+    state = state.copyWith(isLoading: true);
+    
+    // 重新撈取全部或原本區域的 POI
+    final pois = await _db.getAllPois(); 
+    
+    state = state.copyWith(
+      pois: pois,
+      isLoading: false,
+      selectedDate: null, // ✨ 明確地在這裡把狀態清空
+    );
+  }
 }
