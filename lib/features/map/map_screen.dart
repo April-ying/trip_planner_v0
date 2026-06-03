@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/database/tables.dart';
-import '../../../core/utils/schedule_utils.dart';
 import 'map_notifier.dart';
 import 'poi_bottom_sheet.dart';
 import 'roi_filter_bar.dart';
-import '../../core/database/database.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:geolocator/geolocator.dart';
+import 'package:trip_planner/core/database/database.dart';
+
 
 
 class MapScreen extends ConsumerStatefulWidget {
@@ -31,7 +29,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     Colors.brown,
   ];
 
-  LatLng? _currentLocation;
+  
   
   // 用 roiId 對應到顏色
   final Map<String, Color> _roiColorMap = {};
@@ -86,38 +84,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-  // 移動到使用者當前位置
-  Future<void> _moveToCurrentLocation() async {
-    try {
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.deniedForever) return;
+  
 
-      final position = await Geolocator.getCurrentPosition();
-      _mapController.move(LatLng(position.latitude, position.longitude), 10);
-    } catch (e) {
-      // 無法取得位置時不動
-    }
-  }
 
-  Future<void> _fetchCurrentLocation() async {
-    try {
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.deniedForever) return;
-
-      final position = await Geolocator.getCurrentPosition();
-      setState(() {
-        _currentLocation = LatLng(position.latitude, position.longitude);
-      });
-    } catch (e) {
-      // 無法取得位置
-    }
-  }
 
   void _showPoiSheet(Poi poi) {
     showModalBottomSheet(
@@ -132,46 +101,30 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _fetchCurrentLocation();
-  }
+@override
+void initState() {
+  super.initState();
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    _mapController.mapEventStream.first.then((_) {
+      ref.listenManual(mapNotifierProvider, (previous, next) {
+        if (previous?.pois != next.pois) {
+          if (next.selectedDate != null || next.selectedRoiId != null) {
+            _fitMarkers(next.pois);
+          }
+        }
+      });
+    });
+  });
+}
 
   @override
   Widget build(BuildContext context) {
     final mapState = ref.watch(mapNotifierProvider);
     final markers = _buildMarkers(mapState.pois, mapState.selectedPoi);
 
-    // 當 pois 更新時自動移動地圖
-    ref.listen(mapNotifierProvider, (previous, next) {
-      if (previous?.pois != next.pois) {
-        if (next.pois.isEmpty) {
-          _moveToCurrentLocation();
-        } else if (next.selectedDate != null) {
-          // 選了日期，移到標點群中心
-          _fitMarkers(next.pois);
-        } else if (next.selectedRoiId == null && next.selectedDate == null) {
-          // 回到全部，移到使用者位置
-          _moveToCurrentLocation();
-        }
-      }
-    });
-
     return Scaffold(
       appBar: AppBar(
-                title: const Text('地點地圖'),
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.my_location),
-                    onPressed: () async {
-                      await _fetchCurrentLocation();
-                      if (_currentLocation != null) {
-                        _mapController.move(_currentLocation!, 14);
-                      }
-                    },
-                  ),
-                ],
+                title: const Text('Poi地圖'),
               ),
       body: Column(
         children: [
@@ -180,15 +133,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               Expanded(
                 child: RoiFilterBar(
                   selectedRoiId: mapState.selectedRoiId,
-                  onChanged: (roiId) =>
-                      ref.read(mapNotifierProvider.notifier).loadPois(roiId: roiId),
+                  onChanged: (roiId) async {
+                    await ref.read(mapNotifierProvider.notifier).loadPois(roiId: roiId);
+                    await Future.delayed(const Duration(milliseconds: 300));
+                    if (mounted) {
+                      _fitMarkers(ref.read(mapNotifierProvider).pois);
+                    }
+                  },
                 ),
               ),
               IconButton(
                 icon: const Icon(Icons.calendar_today),
                 tooltip: '選擇日期',
                 onPressed: () async {
-                  final picked = await showMonthCalendarPicker(
+                  final picked = await showDatePicker(
                     context: context,
                     initialDate: DateTime.now(),
                     firstDate: DateTime(2020),
@@ -197,11 +155,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   if (picked != null) {
                     final dateStr =
                         '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-                    ref.read(mapNotifierProvider.notifier).loadPoisByDate(dateStr);
+                    await ref.read(mapNotifierProvider.notifier).loadPoisByDate(dateStr);
+                    await Future.delayed(const Duration(milliseconds: 300));
+                    if (mounted) {
+                      _fitMarkers(ref.read(mapNotifierProvider).pois);
+                    }
                   }
                 },
               ),
-              
+              if (mapState.selectedDate != null)
+                TextButton(
+                  onPressed: () =>
+                      ref.read(mapNotifierProvider.notifier).loadPoisByDate(null),
+                  child: const Text('清除'),
+                ),
             ],
           ),
           Expanded(
@@ -216,40 +183,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                   userAgentPackageName: 'com.example.trip_planner',
                 ),
-                MarkerLayer(markers: markers),
-                if (_currentLocation != null)
-                  MarkerLayer(
-                    markers: [
-                      Marker(
-                        point: _currentLocation!,
-                        width: 48,
-                        height: 48,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Container(
-                              width: 24,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: Colors.blue.withOpacity(0.3),
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.blue, width: 2),
-                              ),
-                            ),
-                            Container(
-                              width: 10,
-                              height: 10,
-                              decoration: const BoxDecoration(
-                                color: Colors.blue,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    rotate: false,
-                  ),
+                MarkerLayer(
+                  markers: markers,
+                  rotate: false,
+                ),
               ],
             ),
           ),
