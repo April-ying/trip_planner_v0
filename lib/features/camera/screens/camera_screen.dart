@@ -1,15 +1,19 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart' show compute, kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
+import 'package:sensors_plus/sensors_plus.dart';
 
 import '../../../core/database/database.dart';
 import '../../poi/providers/poi_provider.dart';
@@ -85,17 +89,59 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   double _maxZoom = 1;
   double _currentZoom = 1;
   double _gestureStartZoom = 1;
+  // Physical device orientation, read from the accelerometer because the UI is
+  // locked to portrait (so the camera plugin always reports portraitUp).
+  DeviceOrientation _deviceOrientation = DeviceOrientation.portraitUp;
+  StreamSubscription<AccelerometerEvent>? _accelerometerSub;
+  // Snapshots the live preview at capture time so the feed appears to pause
+  // (rather than flicker back to portrait) while the photo is processed.
+  final GlobalKey _previewBoundaryKey = GlobalKey();
+  ui.Image? _frozenPreview;
   _CameraFrameMode _frameMode = _CameraFrameMode.native;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    // The UI is locked to portrait, so the camera plugin never reports a
+    // landscape device orientation. Read the physical orientation straight from
+    // the accelerometer instead so the overlay and capture can follow it.
+    _accelerometerSub = accelerometerEventStream(
+      samplingPeriod: const Duration(milliseconds: 200),
+    ).listen(_handleAccelerometer);
     Future.microtask(() {
       ref.read(cameraProvider.notifier).initialize(widget.poiId);
       _initializeCameras();
     });
+  }
+
+  void _handleAccelerometer(AccelerometerEvent event) {
+    final x = event.x;
+    final y = event.y;
+    final z = event.z;
+
+    // Phone lying roughly flat (face up/down): keep the last orientation to
+    // avoid jitter when neither horizontal axis dominates.
+    if (z.abs() > 8.5 && x.abs() < 4 && y.abs() < 4) return;
+
+    final DeviceOrientation next;
+    // 1.5 m/s^2 hysteresis band so the overlay doesn't flip-flop near 45°.
+    if (x.abs() > y.abs() + 1.5) {
+      next = x > 0
+          ? DeviceOrientation.landscapeRight
+          : DeviceOrientation.landscapeLeft;
+    } else if (y.abs() > x.abs() + 1.5) {
+      next = y > 0
+          ? DeviceOrientation.portraitUp
+          : DeviceOrientation.portraitDown;
+    } else {
+      return;
+    }
+
+    if (next == _deviceOrientation || !mounted) return;
+    setState(() => _deviceOrientation = next);
   }
 
   @override
@@ -114,7 +160,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _accelerometerSub?.cancel();
+    _frozenPreview?.dispose();
     _controller?.dispose();
+    SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
@@ -192,10 +246,22 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     }
 
     try {
+      // Snapshot the live preview and freeze it underneath the spinner so the
+      // camera feed doesn't visibly jump back to portrait while we process.
+      await _freezePreview();
+      if (!mounted) return;
       setState(() => _isTakingPicture = true);
       HapticFeedback.mediumImpact();
       final screenSize = MediaQuery.sizeOf(context);
-      final screenAspectRatio = screenSize.width / screenSize.height;
+      // The UI is locked to portrait, so MediaQuery always reports a portrait
+      // size. When the device is held in landscape, invert the ratio so the
+      // Fill-mode crop matches what the user actually sees.
+      final rawAspectRatio = screenSize.width / screenSize.height;
+      final screenAspectRatio =
+          _isDeviceLandscape ? 1 / rawAspectRatio : rawAspectRatio;
+      // Lock to the orientation we detected from the accelerometer (the
+      // plugin's own value stays portrait because the UI is orientation-locked).
+      await controller.lockCaptureOrientation(_captureOrientation);
       final file = await controller.takePicture();
       if (!mounted) return;
       final photoFile = File(file.path);
@@ -251,7 +317,80 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         SnackBar(content: Text('Capture failed: ${e.description ?? e.code}')),
       );
     } finally {
-      if (mounted) setState(() => _isTakingPicture = false);
+      await _unlockCaptureOrientation(controller);
+      if (mounted) {
+        setState(() {
+          _frozenPreview?.dispose();
+          _frozenPreview = null;
+          _isTakingPicture = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _freezePreview() async {
+    try {
+      final boundary = _previewBoundaryKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
+      if (boundary == null) return;
+
+      final image = await boundary.toImage(
+        pixelRatio: MediaQuery.devicePixelRatioOf(context),
+      );
+      if (!mounted) {
+        image.dispose();
+        return;
+      }
+      setState(() {
+        _frozenPreview?.dispose();
+        _frozenPreview = image;
+      });
+    } catch (_) {
+      // Best-effort freeze; fall back to the live preview if the snapshot fails.
+    }
+  }
+
+  Future<void> _unlockCaptureOrientation(CameraController controller) async {
+    if (!controller.value.isInitialized) return;
+
+    try {
+      await controller.unlockCaptureOrientation();
+    } on CameraException {
+      // Capture has already finished; failing to unlock should not block the UI.
+    }
+  }
+
+  /// Quarter turns needed to keep the portrait-locked UI upright for the user,
+  /// given the physical device orientation.
+  int get _cameraUiQuarterTurns {
+    switch (_deviceOrientation) {
+      case DeviceOrientation.landscapeRight:
+        return 1;
+      case DeviceOrientation.landscapeLeft:
+        return 3;
+      case DeviceOrientation.portraitDown:
+        return 2;
+      case DeviceOrientation.portraitUp:
+        return 0;
+    }
+  }
+
+  bool get _isDeviceLandscape =>
+      _deviceOrientation == DeviceOrientation.landscapeLeft ||
+      _deviceOrientation == DeviceOrientation.landscapeRight;
+
+  // The platform's capture-orientation lock interprets the two landscape values
+  // opposite to how the UI is rotated, so flip them here to keep saved photos
+  // the right way up.
+  DeviceOrientation get _captureOrientation {
+    switch (_deviceOrientation) {
+      case DeviceOrientation.landscapeLeft:
+        return DeviceOrientation.landscapeRight;
+      case DeviceOrientation.landscapeRight:
+        return DeviceOrientation.landscapeLeft;
+      case DeviceOrientation.portraitUp:
+      case DeviceOrientation.portraitDown:
+        return _deviceOrientation;
     }
   }
 
@@ -373,9 +512,24 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          _buildCameraPreview(camState),
-          if (camState.referenceImage != null && camState.overlayVisible)
-            _buildReferenceOverlay(camState),
+          RepaintBoundary(
+            key: _previewBoundaryKey,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _buildCameraPreview(camState),
+                if (camState.referenceImage != null && camState.overlayVisible)
+                  _buildReferenceOverlay(camState),
+              ],
+            ),
+          ),
+          // Frozen snapshot shown over the live feed while a capture is in
+          // progress, so the preview appears to pause instead of flickering
+          // back to portrait.
+          if (_frozenPreview != null)
+            Positioned.fill(
+              child: RawImage(image: _frozenPreview, fit: BoxFit.cover),
+            ),
           _buildTopBar(camState),
           _buildBottomControls(camState),
           if (_isTakingPicture)
@@ -444,49 +598,88 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Widget _buildReferenceOverlay(CameraState camState) {
     return Positioned.fill(
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onScaleStart: (details) {
-          _gestureStartOffset = camState.overlayOffset;
-          _gestureStartFocalPoint = details.focalPoint;
-          _gestureStartScale = camState.overlayScale;
-        },
-        onScaleUpdate: (details) {
-          ref
-              .read(cameraProvider.notifier)
-              .updateOverlayTransform(
-                offset:
-                    _gestureStartOffset +
-                    (details.focalPoint - _gestureStartFocalPoint),
-                scale: _gestureStartScale * details.scale,
-              );
-        },
-        onDoubleTap: () => ref.read(cameraProvider.notifier).resetOverlay(),
-        child: Center(
-          child: Transform.translate(
-            offset: camState.overlayOffset,
-            child: Transform.scale(
-              scale: camState.overlayScale,
-              child: Opacity(
-                opacity: camState.overlayOpacity,
-                child: Container(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.sizeOf(context).width * 0.86,
-                    maxHeight: MediaQuery.sizeOf(context).height * 0.58,
-                  ),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.white70, width: 1.5),
-                  ),
-                  child: Image.file(
-                    camState.referenceImage!,
-                    fit: BoxFit.contain,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final viewport = Size(constraints.maxWidth, constraints.maxHeight);
+          final boundedOffset =
+              _clampOverlayOffset(camState.overlayOffset, viewport);
+          final overlayConstraints = _overlayConstraints(viewport);
+
+          return GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onScaleStart: (details) {
+              _gestureStartOffset = boundedOffset;
+              _gestureStartFocalPoint = details.focalPoint;
+              _gestureStartScale = camState.overlayScale;
+            },
+            onScaleUpdate: (details) {
+              final nextOffset = _gestureStartOffset +
+                  (details.focalPoint - _gestureStartFocalPoint);
+              ref.read(cameraProvider.notifier).updateOverlayTransform(
+                    offset: _clampOverlayOffset(nextOffset, viewport),
+                    scale: _gestureStartScale * details.scale,
+                  );
+            },
+            onDoubleTap: () =>
+                ref.read(cameraProvider.notifier).resetOverlay(),
+            child: Center(
+              child: Transform.translate(
+                offset: boundedOffset,
+                child: Transform.scale(
+                  scale: camState.overlayScale,
+                  child: Opacity(
+                    opacity: camState.overlayOpacity,
+                    // Rotate the overlay box to stay upright relative to the
+                    // user when the device is held in landscape.
+                    child: _RotatingCameraUi(
+                      quarterTurns: _cameraUiQuarterTurns,
+                      child: Container(
+                        constraints: overlayConstraints,
+                        decoration: BoxDecoration(
+                          border:
+                              Border.all(color: Colors.white70, width: 1.5),
+                        ),
+                        child: Image.file(
+                          camState.referenceImage!,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
+    );
+  }
+
+  BoxConstraints _overlayConstraints(Size viewport) {
+    // When the device is held in landscape the overlay is rotated a quarter
+    // turn, so its pre-rotation box maps the screen axes the other way round:
+    // its width ends up along the screen's long (vertical) axis and its height
+    // along the short (horizontal) axis. Swap the viewport extents to match.
+    if (_isDeviceLandscape) {
+      return BoxConstraints(
+        maxWidth: viewport.height * 0.82,
+        maxHeight: viewport.width * 0.86,
+      );
+    }
+
+    return BoxConstraints(
+      maxWidth: viewport.width * 0.86,
+      maxHeight: viewport.height * 0.58,
+    );
+  }
+
+  Offset _clampOverlayOffset(Offset offset, Size viewport) {
+    final maxDx = viewport.width * 0.48;
+    final maxDy = viewport.height * 0.48;
+
+    return Offset(
+      offset.dx.clamp(-maxDx, maxDx).toDouble(),
+      offset.dy.clamp(-maxDy, maxDy).toDouble(),
     );
   }
 
@@ -606,11 +799,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                   children: [
                     SizedBox(
                       width: 42,
-                      child: Text(
-                        '${_currentZoom.toStringAsFixed(1)}x',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontFeatures: [FontFeature.tabularFigures()],
+                      child: Center(
+                        child: _RotatingCameraUi(
+                          quarterTurns: _cameraUiQuarterTurns,
+                          child: Text(
+                            '${_currentZoom.toStringAsFixed(1)}x',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -1054,6 +1252,27 @@ class _ShutterButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Rotates [child] by whole quarter turns so a control stays upright relative
+/// to the user while the Scaffold itself stays locked to portrait.
+class _RotatingCameraUi extends StatelessWidget {
+  final int quarterTurns;
+  final Widget child;
+
+  const _RotatingCameraUi({required this.quarterTurns, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final normalizedTurns = quarterTurns % 4;
+    if (normalizedTurns == 0) return child;
+
+    return Transform.rotate(
+      angle: normalizedTurns * math.pi / 2,
+      alignment: Alignment.center,
+      child: child,
     );
   }
 }

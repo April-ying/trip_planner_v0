@@ -50,6 +50,7 @@ dependencies:
   camera: ^0.12.0+1
   image: ^4.8.0
   image_picker: ^1.1.2
+  sensors_plus: ^6.0.0
 
   # Cutout (摳圖) — two engines: ISNet anime model via ONNX, and Google ML Kit
   onnxruntime: ^1.4.1
