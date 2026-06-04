@@ -2,10 +2,14 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:trip_planner/core/providers/database_provider.dart';
 import 'package:trip_planner/features/roi/providers/roi_provider.dart';
 import 'package:gal/gal.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../data/vlog_repository.dart';
 import '../services/frame_builder.dart';
@@ -20,6 +24,18 @@ class _FrameArgs {
     required this.userImagePath,
     required this.referenceImagePath,
     required this.title,
+  });
+}
+
+class _BgmOption {
+  final String label;
+  final String? path;
+  final bool isAddAction;
+
+  const _BgmOption({
+    required this.label,
+    this.path,
+    this.isAddAction = false,
   });
 }
 
@@ -42,10 +58,79 @@ class VlogPreviewPage extends ConsumerStatefulWidget {
 class _VlogPreviewPageState extends ConsumerState<VlogPreviewPage> {
 
   String? selectedRoiId;
+  String? selectedBgmPath;
+
+  final List<_BgmOption> customBgmOptions = [];
+
+  List<_BgmOption> get bgmOptions => [
+    const _BgmOption(label: 'No BGM', path: null),
+    const _BgmOption(label: 'Default BGM', path: 'default'),
+    ...customBgmOptions,
+    const _BgmOption(label: '+ Add BGM', isAddAction: true),
+  ];
 
   bool isGenerating = false;
   
   String? outputVideoPath;
+
+  Future<String> prepareDefaultBgm() async {
+    const assetPath = 'lib/features/vlog/audio/Carefree.mp3';
+
+    final bytes = await rootBundle.load(assetPath);
+    final appDir = await getApplicationDocumentsDirectory();
+    final bgmDir = Directory(p.join(appDir.path, 'bgm'));
+
+    if (!await bgmDir.exists()) {
+      await bgmDir.create(recursive: true);
+    }
+
+    final outputPath = p.join(bgmDir.path, 'default_carefree.mp3');
+    final outputFile = File(outputPath);
+
+    if (!await outputFile.exists()) {
+      await outputFile.writeAsBytes(
+        bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes),
+      );
+    }
+
+    return outputPath;
+  }
+
+  Future<void> addBgm() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['mp3', 'wav', 'm4a', 'aac'],
+    );
+
+    if (result == null || result.files.single.path == null) return;
+
+    final source = File(result.files.single.path!);
+    final appDir = await (getApplicationDocumentsDirectory());
+    final bgmDir = Directory(p.join(appDir.path, 'bgm'));
+
+    if (!await bgmDir.exists()) {
+      await bgmDir.create(recursive: true);
+    }
+
+    final extension = p.extension(source.path).isEmpty
+        ? '.mp3'
+        : p.extension(source.path);
+
+    final fileName = '${DateTime.now().millisecondsSinceEpoch}$extension';
+    final savedPath = p.join(bgmDir.path, fileName);
+
+    await source.copy(savedPath);
+
+    setState(() {
+      customBgmOptions.add(
+        _BgmOption(
+          label: p.basename(source.path),
+          path: savedPath,
+        ),
+      );
+      selectedBgmPath = savedPath;
+    });
+  }
 
   Future<void> generateVlog() async {
 
@@ -108,11 +193,18 @@ class _VlogPreviewPageState extends ConsumerState<VlogPreviewPage> {
         framePaths.add(tempFile.path);
       }
 
+      // select init bgm
+      final bgmPath = selectedBgmPath == 'default'
+          ? await prepareDefaultBgm()
+          : selectedBgmPath;
+
       // generate mp4
       final ffmpeg = FFmpegService();
       final videoPath = await ffmpeg.createVideoFromImages(
         imagePaths: framePaths,
         secondsPerImage: 3,
+        transitionSeconds: 0.6,
+        bgmPath: bgmPath,
       );
 
       // ffmpeg has copied frames into its own dir; we can drop ours now.
@@ -203,6 +295,33 @@ class _VlogPreviewPageState extends ConsumerState<VlogPreviewPage> {
                       outputVideoPath = null;
                     });
                   },
+                ),
+
+                const SizedBox(height: 20),
+
+                DropdownButtonFormField<String?>(
+                  initialValue: selectedBgmPath,
+                  decoration: const InputDecoration(
+                    labelText: 'BGM',
+                  ),
+                  items: bgmOptions.map((option) {
+                    return DropdownMenuItem<String?>(
+                      value: option.isAddAction ? '__add_bgm__' : option.path,
+                      child: Text(option.label),
+                    );
+                  }).toList(),
+                  onChanged: isGenerating
+                      ? null
+                      : (value) async {
+                          if (value == '__add_bgm__') {
+                            await addBgm();
+                            return;
+                          }
+
+                          setState(() {
+                            selectedBgmPath = value;
+                          });
+                        },
                 ),
 
                 const SizedBox(height: 20),
